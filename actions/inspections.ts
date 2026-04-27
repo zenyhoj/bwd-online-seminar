@@ -1,0 +1,221 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+
+import { getActionContext, parseFormData, withErrorHandling } from "@/actions/_helpers";
+import { inspectionRescheduleSchema, inspectionScheduleSchema, inspectionUpdateSchema } from "@/schemas";
+import type { ActionState } from "@/types";
+
+function isPastDateTime(value: string) {
+  return new Date(value).getTime() < Date.now();
+}
+
+function toDateOnlyISOString(value: string) {
+  return new Date(`${value}T00:00:00.000Z`).toISOString();
+}
+
+function getSchemaMismatchMessage(message: string) {
+  if (!message.includes("material_list") || !message.includes("inspections")) {
+    return null;
+  }
+
+  return "The database is missing the inspections.material_list column. Run supabase/inspection-material-list.sql in Supabase SQL Editor, then try saving again.";
+}
+
+export async function scheduleInspectionAction(_prevState: ActionState, formData: FormData): Promise<ActionState> {
+  return withErrorHandling(async () => {
+    const { supabase, profile } = await getActionContext();
+    const parsed = await parseFormData(inspectionScheduleSchema, {
+      applicationId: formData.get("applicationId"),
+      inspectorId: formData.get("inspectorId"),
+      scheduledAt: formData.get("scheduledAt")
+    });
+
+    if (parsed.error) {
+      return parsed.error;
+    }
+
+    if (isPastDateTime(parsed.data.scheduledAt)) {
+      return {
+        success: false,
+        message: "Inspection schedule must be today or later than the current date and time."
+      };
+    }
+
+    const { data: inspector, error: inspectorError } = await supabase
+      .from("inspectors")
+      .select("id, full_name")
+      .eq("id", parsed.data.inspectorId)
+      .eq("organization_id", profile.organization_id)
+      .eq("is_active", true)
+      .single();
+
+    if (inspectorError || !inspector) {
+      return { success: false, message: inspectorError?.message ?? "Selected inspector was not found." };
+    }
+
+    const { error } = await supabase.from("inspections").insert({
+      organization_id: profile.organization_id,
+      application_id: parsed.data.applicationId,
+      scheduled_by: profile.id,
+      registry_inspector_id: parsed.data.inspectorId,
+      inspector_name: inspector.full_name,
+      scheduled_at: new Date(parsed.data.scheduledAt).toISOString(),
+      status: "scheduled"
+    });
+
+    if (error) {
+      return {
+        success: false,
+        message: getSchemaMismatchMessage(error.message) ?? error.message
+      };
+    }
+
+    await supabase
+      .from("applications")
+      .update({ status: "inspection_scheduled" })
+      .eq("id", parsed.data.applicationId);
+
+    revalidatePath("/admin/inspections");
+    return { success: true, message: "Inspection scheduled." };
+  });
+}
+
+export async function rescheduleInspectionAction(_prevState: ActionState, formData: FormData): Promise<ActionState> {
+  return withErrorHandling(async () => {
+    const { supabase } = await getActionContext();
+    const parsed = await parseFormData(inspectionRescheduleSchema, {
+      inspectionId: formData.get("inspectionId"),
+      scheduledAt: formData.get("scheduledAt")
+    });
+
+    if (parsed.error) {
+      return parsed.error;
+    }
+
+    if (isPastDateTime(parsed.data.scheduledAt)) {
+      return {
+        success: false,
+        message: "Rescheduled inspection time must be today or later than the current date and time."
+      };
+    }
+
+    const { data: inspection, error: fetchError } = await supabase
+      .from("inspections")
+      .select("application_id")
+      .eq("id", parsed.data.inspectionId)
+      .single();
+
+    if (fetchError || !inspection) {
+      return { success: false, message: fetchError?.message ?? "Inspection not found." };
+    }
+
+    const { error } = await supabase
+      .from("inspections")
+      .update({
+        scheduled_at: new Date(parsed.data.scheduledAt).toISOString(),
+        status: "rescheduled"
+      })
+      .eq("id", parsed.data.inspectionId);
+
+    if (error) {
+      return { success: false, message: error.message };
+    }
+
+    await supabase
+      .from("applications")
+      .update({ status: "inspection_scheduled" })
+      .eq("id", inspection.application_id);
+
+    revalidatePath("/admin/inspections");
+    revalidatePath("/admin");
+    revalidatePath("/applicant");
+    return { success: true, message: "Inspection schedule updated." };
+  });
+}
+
+export async function updateInspectionAction(_prevState: ActionState, formData: FormData): Promise<ActionState> {
+  return withErrorHandling(async () => {
+    const { supabase } = await getActionContext();
+    const parsed = await parseFormData(inspectionUpdateSchema, {
+      inspectionId: formData.get("inspectionId"),
+      status: formData.get("status"),
+      plumbingApproved: formData.get("plumbingApproved") === "true",
+      inspectedAt: formData.get("inspectedAt"),
+      remarks: formData.get("remarks"),
+      materialList: formData.get("materialList"),
+      latitude: formData.get("latitude"),
+      longitude: formData.get("longitude"),
+      referenceAccountNumber: formData.get("referenceAccountNumber"),
+      referenceAccountName: formData.get("referenceAccountName"),
+      accountNumber: formData.get("accountNumber")
+    });
+
+    if (parsed.error) {
+      return parsed.error;
+    }
+
+    const { data: inspection, error: fetchError } = await supabase
+      .from("inspections")
+      .select("application_id")
+      .eq("id", parsed.data.inspectionId)
+      .single();
+
+    if (fetchError || !inspection) {
+      return { success: false, message: fetchError?.message ?? "Inspection not found." };
+    }
+
+    const { data: application, error: applicationError } = await supabase
+      .from("applications")
+      .select("accredited_plumber_id, accredited_plumbers(full_name)")
+      .eq("id", inspection.application_id)
+      .single();
+
+    if (applicationError || !application) {
+      return { success: false, message: applicationError?.message ?? "Application not found." };
+    }
+
+    const plumberName = (application.accredited_plumbers as { full_name?: string } | null)?.full_name?.trim() ?? "";
+
+    if (!plumberName) {
+      return {
+        success: false,
+        message: "Set an accredited plumber on this application before saving the inspection."
+      };
+    }
+
+    const { error } = await supabase
+      .from("inspections")
+      .update({
+        status: parsed.data.status,
+        plumbing_approved: parsed.data.plumbingApproved,
+        remarks: parsed.data.remarks,
+        material_list: parsed.data.materialList,
+        latitude: parsed.data.latitude,
+        longitude: parsed.data.longitude,
+        plumber_name: plumberName,
+        reference_account_number: parsed.data.referenceAccountNumber,
+        reference_account_name: parsed.data.referenceAccountName,
+        account_number: parsed.data.accountNumber,
+        inspected_at: toDateOnlyISOString(parsed.data.inspectedAt)
+      })
+      .eq("id", parsed.data.inspectionId);
+
+    if (error) {
+      return { success: false, message: error.message };
+    }
+
+    await supabase
+      .from("applications")
+      .update({
+        status: parsed.data.status === "approved" ? "inspection_completed" : "under_review"
+      })
+      .eq("id", inspection.application_id);
+
+    revalidatePath("/inspector");
+    revalidatePath("/admin/inspections");
+    revalidatePath("/admin");
+    revalidatePath("/applicant");
+    return { success: true, message: "Inspection report saved." };
+  });
+}
