@@ -3,25 +3,34 @@
 import { revalidatePath } from "next/cache";
 
 import { getActionContext, parseFormData, withErrorHandling } from "@/actions/_helpers";
-import { applicationSchema, applicationStatusSchema } from "@/schemas";
+import { applicationStatusSchema } from "@/schemas";
 import type { ActionState } from "@/types";
 
 export async function createApplicationAction(_prevState: ActionState, formData: FormData): Promise<ActionState> {
   return withErrorHandling(async () => {
     const { supabase, profile } = await getActionContext();
-    const parsed = await parseFormData(applicationSchema, {
-      lastName: formData.get("lastName"),
-      firstName: formData.get("firstName"),
-      middleInitial: formData.get("middleInitial"),
-      sex: formData.get("sex"),
-      age: formData.get("age"),
-      address: formData.get("address"),
-      cellphoneNumber: formData.get("cellphoneNumber"),
-      numberOfUsers: formData.get("numberOfUsers")
-    });
 
-    if (parsed.error) {
-      return parsed.error;
+    const applicantId = formData.get("applicantId")?.toString() ?? "";
+    const numberOfUsersRaw = formData.get("numberOfUsers");
+    const numberOfUsers = numberOfUsersRaw ? parseInt(String(numberOfUsersRaw), 10) : NaN;
+
+    if (!applicantId) {
+      return { success: false, message: "Applicant ID is required." };
+    }
+    if (isNaN(numberOfUsers) || numberOfUsers < 1 || numberOfUsers > 100) {
+      return { success: false, message: "Number of users must be between 1 and 100.", fieldErrors: { numberOfUsers: ["Number of users must be between 1 and 100."] } };
+    }
+
+    // Fetch applicant data server-side (do not trust hidden form inputs for personal data)
+    const { data: applicant, error: applicantError } = await supabase
+      .from("applicants")
+      .select("*")
+      .eq("id", applicantId)
+      .eq("profile_id", profile.id)
+      .single();
+
+    if (applicantError || !applicant) {
+      return { success: false, message: "Applicant not found or you do not have permission." };
     }
 
     const { data: seminarItems, error: seminarItemsError } = await supabase
@@ -42,7 +51,7 @@ export async function createApplicationAction(_prevState: ActionState, formData:
     const { data: completedItems, error: completedItemsError } = await supabase
       .from("applicant_seminar_progress")
       .select("seminar_item_id")
-      .eq("applicant_id", profile.id)
+      .eq("applicant_id", applicantId)
       .eq("completed", true)
       .in("seminar_item_id", seminarItemIds);
 
@@ -51,21 +60,18 @@ export async function createApplicationAction(_prevState: ActionState, formData:
     }
 
     if ((completedItems?.length ?? 0) < seminarItemIds.length) {
-      return { success: false, message: "Complete the full seminar series before submitting your information." };
+      return { success: false, message: "Complete the full seminar series before submitting your application." };
     }
-
-    const middleInitial = parsed.data.middleInitial?.trim();
-    const fullName = `${parsed.data.lastName}, ${parsed.data.firstName}${middleInitial ? ` ${middleInitial}` : ""}`.trim();
 
     const { error } = await supabase.from("applications").insert({
       organization_id: profile.organization_id,
-      applicant_id: profile.id,
-      full_name: fullName,
-      gender: parsed.data.sex,
-      age: parsed.data.age,
-      address: parsed.data.address,
-      cellphone_number: parsed.data.cellphoneNumber,
-      number_of_users: parsed.data.numberOfUsers,
+      applicant_id: applicantId,
+      full_name: applicant.full_name,
+      gender: applicant.gender,
+      age: applicant.age,
+      address: applicant.address,
+      cellphone_number: applicant.cellphone_number,
+      number_of_users: numberOfUsers,
       service_type: "new_connection",
       seminar_completed: true,
       status: "submitted",
@@ -80,7 +86,11 @@ export async function createApplicationAction(_prevState: ActionState, formData:
     revalidatePath("/applicant/applications/new");
     revalidatePath("/applicant/documents");
     revalidatePath("/applicant/payments");
-    return { success: true, message: "Applicant information submitted successfully." };
+    return {
+      success: true,
+      message: "Application submitted successfully.",
+      redirectTo: `/applicant?applicant=${applicantId}`
+    };
   });
 }
 

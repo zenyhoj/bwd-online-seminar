@@ -1,9 +1,35 @@
+import { redirect } from "next/navigation";
 import { SeminarModuleList } from "@/components/applicant/seminar-module-list";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getApplicantSeminarState } from "@/lib/queries";
+import { getApplicants, getApplicantSeminarState } from "@/lib/queries";
 
-export default async function ApplicantSeminarPage() {
-  const seminarState = await getApplicantSeminarState();
+export default async function ApplicantSeminarPage({
+  searchParams
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+
+  // Auto-resolve applicant: use param, else first applicant, else send to create one
+  const applicants = await getApplicants();
+
+  const paramId = typeof resolvedSearchParams?.["applicant"] === "string"
+    ? resolvedSearchParams["applicant"]
+    : null;
+
+  const applicantId = paramId ?? applicants[0]?.id ?? null;
+
+  if (!applicantId) {
+    // No applicant records yet — send them to create one first
+    redirect("/applicant/new");
+  }
+
+  // If the URL has no param, redirect with it so the URL is canonical
+  if (!paramId && applicantId) {
+    redirect(`/applicant/seminar?applicant=${applicantId}`);
+  }
+
+  const seminarState = await getApplicantSeminarState(applicantId);
 
   if (seminarState.items.length === 0) {
     return (
@@ -55,7 +81,7 @@ export default async function ApplicantSeminarPage() {
           </CardContent>
         </Card>
       </div>
-      <SeminarModuleList items={seminarState.items} progress={seminarState.progress} />
+      <SeminarModuleList items={seminarState.items} progress={seminarState.progress} applicantId={applicantId} />
     </div>
   );
 }

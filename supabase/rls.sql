@@ -99,9 +99,9 @@ with check (
 create policy "applicant_seminar_progress_applicant_manage_own"
 on public.applicant_seminar_progress
 for all
-using (applicant_id = auth.uid())
+using (public.user_owns_applicant(applicant_id))
 with check (
-  applicant_id = auth.uid()
+  public.user_owns_applicant(applicant_id)
   and organization_id = public.current_profile_organization_id()
 );
 
@@ -120,13 +120,13 @@ with check (
 create policy "applications_applicant_own_rows"
 on public.applications
 for select
-using (applicant_id = auth.uid());
+using (public.user_owns_applicant(applicant_id));
 
 create policy "applications_applicant_insert"
 on public.applications
 for insert
 with check (
-  applicant_id = auth.uid()
+  public.user_owns_applicant(applicant_id)
   and organization_id = public.current_profile_organization_id()
   and public.current_profile_role() = 'applicant'
 );
@@ -134,8 +134,8 @@ with check (
 create policy "applications_applicant_update_own"
 on public.applications
 for update
-using (applicant_id = auth.uid())
-with check (applicant_id = auth.uid());
+using (public.user_owns_applicant(applicant_id))
+with check (public.user_owns_applicant(applicant_id));
 
 create policy "applications_admin_org_manage"
 on public.applications
@@ -286,6 +286,47 @@ using (
       and ir.organization_id = public.current_profile_organization_id()
       and ir.full_name ilike p.full_name
   )
+);
+
+create policy "documents_reviewer_update"
+on public.documents
+for update
+using (
+  exists (
+    select 1 from public.profiles
+    where id = auth.uid()
+      and organization_id = documents.organization_id
+      and role = 'admin'
+  )
+);
+
+create policy "Public access to seminar media"
+on storage.objects for select
+to public
+using (bucket_id = 'seminar-media');
+
+create policy "Admin can insert seminar media"
+on storage.objects for insert
+to authenticated
+with check (
+  bucket_id = 'seminar-media' and
+  exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+);
+
+create policy "Admin can update seminar media"
+on storage.objects for update
+to authenticated
+using (
+  bucket_id = 'seminar-media' and
+  exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+);
+
+create policy "Admin can delete seminar media"
+on storage.objects for delete
+to authenticated
+using (
+  bucket_id = 'seminar-media' and
+  exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
 );
 
 create policy "payments_applicant_select_own"

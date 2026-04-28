@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const applicationSchema = z.object({
+  applicantId: z.string().uuid(),
   lastName: z.string().min(2),
   firstName: z.string().min(2),
   middleInitial: z.string().trim().max(3).optional(),

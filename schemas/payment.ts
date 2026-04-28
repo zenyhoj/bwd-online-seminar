@@ -9,7 +9,8 @@ export const paymentScheduleSchema = z.object({
 export const paymentStatusSchema = z.object({
   paymentId: z.string().uuid(),
   status: z.enum(["scheduled", "paid", "overdue", "cancelled"]),
-  amount: z.coerce.number().min(0),
+  amount: z.coerce.number().min(0).optional(),
   officialReceiptNumber: z.string().optional(),
-  notes: z.string().optional()
+  paidAt: z.string().optional(),
+  officePaymentAt: z.string().optional()
 });

@@ -46,8 +46,8 @@ export function ApplicationSwitcher({
   selectedApplicationId,
   basePath,
   queryParams,
-  title = "Applicant records",
-  description = "Choose which applicant record you want to open."
+  title = "Applications",
+  description = "Choose which application record you want to open."
 }: ApplicationSwitcherProps) {
   if (applications.length === 0) {
     return null;

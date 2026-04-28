@@ -3,27 +3,48 @@
 import Link from "next/link";
 import { useActionState, useEffect, useState } from "react";
 
-import { scheduleInspectionAction } from "@/actions/inspections";
+import { rescheduleInspectionAction, scheduleInspectionAction } from "@/actions/inspections";
 import { initialActionState } from "@/actions/state";
 import { FormMessage } from "@/components/forms/form-message";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { formatDateTime } from "@/lib/format";
 import type { InspectorRecord } from "@/types";
+
+type ExistingInspection = {
+  id: string;
+  status?: string | null;
+  scheduled_at?: string | null;
+  inspector_name?: string | null;
+};
 
 type InspectionSchedulerFormProps = {
   applicationId: string;
   inspectors: InspectorRecord[];
+  existingInspection?: ExistingInspection | null;
 };
 
-export function InspectionSchedulerForm({ applicationId, inspectors }: InspectionSchedulerFormProps) {
-  const [state, formAction, pending] = useActionState(scheduleInspectionAction, initialActionState);
+export function InspectionSchedulerForm({
+  applicationId,
+  inspectors,
+  existingInspection
+}: InspectionSchedulerFormProps) {
+  const [scheduleState, scheduleAction, schedulePending] = useActionState(scheduleInspectionAction, initialActionState);
+  const [rescheduleState, rescheduleAction, reschedulePending] = useActionState(rescheduleInspectionAction, initialActionState);
   const [minSchedule, setMinSchedule] = useState("");
+  const [showReschedule, setShowReschedule] = useState(false);
 
   useEffect(() => {
     setMinSchedule(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16));
   }, []);
+
+  // Close reschedule panel on success
+  useEffect(() => {
+    if (rescheduleState.success) setShowReschedule(false);
+  }, [rescheduleState.success]);
 
   if (inspectors.length === 0) {
     return (
@@ -43,13 +64,77 @@ export function InspectionSchedulerForm({ applicationId, inspectors }: Inspectio
     );
   }
 
+  // Already has a scheduled inspection — show read-only summary + reschedule option
+  if (existingInspection) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Inspection scheduled</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 text-sm sm:grid-cols-3">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Inspector</p>
+              <p className="mt-1 font-medium">{existingInspection.inspector_name ?? "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Scheduled at</p>
+              <p className="mt-1 font-medium">{formatDateTime(existingInspection.scheduled_at ?? null)}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Status</p>
+              <div className="mt-1">
+                <StatusBadge status={existingInspection.status ?? "scheduled"} />
+              </div>
+            </div>
+          </div>
+
+          {existingInspection.status !== "approved" && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowReschedule((v) => !v)}
+              >
+                {showReschedule ? "Cancel" : "Reschedule"}
+              </Button>
+
+              {showReschedule && (
+                <form action={rescheduleAction} className="grid gap-3 pt-2 md:grid-cols-[1fr_auto] md:items-end">
+                  <input type="hidden" name="inspectionId" value={existingInspection.id} />
+                  <div className="space-y-2">
+                    <Label htmlFor={`reschedule-${existingInspection.id}`}>New date and time</Label>
+                    <Input
+                      id={`reschedule-${existingInspection.id}`}
+                      name="scheduledAt"
+                      type="datetime-local"
+                      min={minSchedule || undefined}
+                      required
+                    />
+                  </div>
+                  <Button type="submit" disabled={reschedulePending}>
+                    {reschedulePending ? "Saving..." : "Confirm reschedule"}
+                  </Button>
+                  <div className="md:col-span-2">
+                    <FormMessage state={rescheduleState} />
+                  </div>
+                </form>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // No inspection yet — show the schedule form
   return (
     <Card>
       <CardHeader>
         <CardTitle>Schedule inspection</CardTitle>
       </CardHeader>
       <CardContent>
-        <form action={formAction} className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+        <form action={scheduleAction} className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
           <input type="hidden" name="applicationId" value={applicationId} />
           <div className="space-y-2">
             <Label htmlFor={`inspector-${applicationId}`}>Inspector</Label>
@@ -77,11 +162,11 @@ export function InspectionSchedulerForm({ applicationId, inspectors }: Inspectio
               required
             />
           </div>
-          <Button type="submit" disabled={pending}>
-            {pending ? "Saving..." : "Schedule"}
+          <Button type="submit" disabled={schedulePending}>
+            {schedulePending ? "Saving..." : "Schedule"}
           </Button>
           <div className="md:col-span-3">
-            <FormMessage state={state} />
+            <FormMessage state={scheduleState} />
           </div>
         </form>
       </CardContent>

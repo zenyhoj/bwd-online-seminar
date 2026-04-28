@@ -1,11 +1,11 @@
+import { redirect } from "next/navigation";
+import { ApplicantSwitcher } from "@/components/applicant/applicant-switcher";
 import { ApplicationSwitcher } from "@/components/applicant/application-switcher";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getCurrentProfile } from "@/lib/auth";
-import type { Application } from "@/types";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
+import { getApplicants, getApplicantApplications } from "@/lib/queries";
 
 const applicationFeeGuide = [
   {
@@ -59,16 +59,20 @@ type ApplicantPaymentsPageProps = {
 
 export default async function ApplicantPaymentsPage({ searchParams }: ApplicantPaymentsPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const supabase = await createSupabaseServerClient();
-  const profile = await getCurrentProfile();
-  const { data: applications } = await supabase
-    .from("applications")
-    .select("*")
-    .eq("applicant_id", profile.id)
-    .order("created_at", { ascending: false })
-    .returns<Application[]>();
+  // Use admin client — ownership is already verified via getApplicants() which
+  // only returns applicants belonging to the authenticated profile.
+  const supabase = createSupabaseAdminClient();
 
-  const applicationList = applications ?? [];
+  const applicants = await getApplicants();
+  const selectedApplicantId = getStringParam(resolvedSearchParams, "applicant") ?? applicants[0]?.id ?? null;
+
+  if (!selectedApplicantId && applicants.length === 0) {
+    redirect("/applicant");
+  }
+
+  const effectiveApplicantId = selectedApplicantId ?? applicants[0]?.id ?? null;
+  const applicationList = effectiveApplicantId ? await getApplicantApplications(effectiveApplicantId) : [];
+
   const selectedApplicationId = getStringParam(resolvedSearchParams, "application") ?? applicationList[0]?.id ?? null;
   const application = applicationList.find((item) => item.id === selectedApplicationId) ?? applicationList[0] ?? null;
 
@@ -84,13 +88,24 @@ export default async function ApplicantPaymentsPage({ searchParams }: ApplicantP
           View the date you should go to the office for payment, plus your payment status.
         </p>
       </div>
-      <ApplicationSwitcher
-        applications={applicationList}
-        selectedApplicationId={application?.id}
+      <ApplicantSwitcher
+        applicants={applicants}
+        selectedApplicantId={effectiveApplicantId}
         basePath="/applicant/payments"
+        queryParams={{ application: selectedApplicationId ?? undefined }}
         title="Choose applicant"
-        description="Switch between applicant records to review the correct payment schedule."
+        description="Switch between applicants to view their payment schedule."
       />
+      {applicationList.length > 1 ? (
+        <ApplicationSwitcher
+          applications={applicationList}
+          selectedApplicationId={application?.id}
+          basePath="/applicant/payments"
+          queryParams={{ applicant: effectiveApplicantId ?? undefined }}
+          title="Choose application"
+          description="This applicant has multiple applications. Choose one to view payments."
+        />
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle>Office payment schedule</CardTitle>
@@ -99,26 +114,65 @@ export default async function ApplicantPaymentsPage({ searchParams }: ApplicantP
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Type</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Office payment schedule</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          {(payments ?? []).length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
+              No payment schedule has been set yet.<br />
+              The admin will schedule your office payment after the inspection is approved.
+            </div>
+          ) : (
+            <div className="space-y-3">
               {(payments ?? []).map((payment) => (
-                <TableRow key={payment.id}>
-                  <TableCell>{payment.payment_type.replaceAll("_", " ")}</TableCell>
-                  <TableCell>{formatScheduledAmount(payment.amount)}</TableCell>
-                  <TableCell>{getOfficePaymentDisplay(payment)}</TableCell>
-                  <TableCell><StatusBadge status={payment.status} /></TableCell>
-                </TableRow>
+                <div
+                  key={payment.id}
+                  className={`relative overflow-hidden rounded-xl border p-5 ${
+                    payment.status === "scheduled"
+                      ? "border-primary/30 bg-primary/[0.04] shadow-sm"
+                      : payment.status === "paid"
+                      ? "border-emerald-200/80 bg-emerald-50/40"
+                      : "border-border/70 bg-muted/20"
+                  }`}
+                >
+                  <div className={`absolute inset-y-0 left-0 w-1 rounded-l-xl ${
+                    payment.status === "scheduled" ? "bg-primary" :
+                    payment.status === "paid" ? "bg-emerald-500" : "bg-border"
+                  }`} />
+
+                  <div className="pl-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                          {payment.payment_type.replaceAll("_", " ")}
+                        </p>
+                        <p className="text-2xl font-bold tracking-tight">
+                          {formatScheduledAmount(payment.amount)}
+                        </p>
+                      </div>
+                      <StatusBadge status={payment.status} />
+                    </div>
+
+                    <div className={`mt-4 rounded-lg p-3 ${
+                      payment.status === "scheduled"
+                        ? "bg-primary/10 border border-primary/20"
+                        : "bg-muted/40 border border-border/60"
+                    }`}>
+                      <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                        {payment.status === "paid" ? "Paid on" : "Go to BWD Office on"}
+                      </p>
+                      <p className={`mt-1 text-lg font-semibold ${payment.status === "scheduled" ? "text-primary" : ""}`}>
+                        {getOfficePaymentDisplay(payment)}
+                      </p>
+                      {payment.status === "scheduled" && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Bring your documentary requirements to the office on this date.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
               ))}
-            </TableBody>
-          </Table>
+            </div>
+          )}
+
 
           <div className="grid gap-4 lg:grid-cols-[1.15fr_1fr]">
             <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">

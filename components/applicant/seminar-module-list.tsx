@@ -2,6 +2,8 @@
 
 import { useActionState } from "react";
 
+import { Download } from "lucide-react";
+
 import { updateSeminarProgressAction } from "@/actions/seminar";
 import { initialActionState } from "@/actions/state";
 import { FormMessage } from "@/components/forms/form-message";
@@ -12,6 +14,7 @@ import type { ApplicantSeminarProgress, SeminarItem } from "@/types";
 type SeminarModuleListProps = {
   items: SeminarItem[];
   progress: ApplicantSeminarProgress[];
+  applicantId: string;
 };
 
 type SeminarItemCardProps = {
@@ -19,6 +22,7 @@ type SeminarItemCardProps = {
   index: number;
   completed: boolean;
   isLastPendingItem: boolean;
+  applicantId: string;
 };
 
 function SeminarMedia({ item }: { item: SeminarItem }) {
@@ -27,7 +31,7 @@ function SeminarMedia({ item }: { item: SeminarItem }) {
       <img
         src={item.media_url}
         alt={item.title}
-        className="h-56 w-full rounded-xl object-cover ring-1 ring-border/80"
+        className="w-full h-auto rounded-xl ring-1 ring-border/80"
       />
     );
   }
@@ -46,10 +50,27 @@ function SeminarMedia({ item }: { item: SeminarItem }) {
     );
   }
 
+  if (item.media_type === "pdf" && item.media_url) {
+    return (
+      <div className="flex items-center justify-between rounded-xl border border-border/80 bg-secondary/20 p-4">
+        <div className="space-y-1">
+          <p className="font-medium">Seminar Document</p>
+          <p className="text-xs text-muted-foreground">Download the PDF document to review the material.</p>
+        </div>
+        <Button asChild variant="outline" size="sm">
+          <a href={item.media_url} target="_blank" rel="noopener noreferrer" download>
+            <Download className="mr-2 h-4 w-4" />
+            Download PDF
+          </a>
+        </Button>
+      </div>
+    );
+  }
+
   return null;
 }
 
-export function SeminarModuleList({ items, progress }: SeminarModuleListProps) {
+export function SeminarModuleList({ items, progress, applicantId }: SeminarModuleListProps) {
   const completedIds = new Set(progress.filter((entry) => entry.completed).map((entry) => entry.seminar_item_id));
   const remainingCount = items.filter((item) => !completedIds.has(item.id)).length;
   const allCompleted = items.length > 0 && remainingCount === 0;
@@ -66,6 +87,7 @@ export function SeminarModuleList({ items, progress }: SeminarModuleListProps) {
             index={index}
             completed={completed}
             isLastPendingItem={!completed && remainingCount === 1}
+            applicantId={applicantId}
           />
         );
       })}
@@ -75,11 +97,11 @@ export function SeminarModuleList({ items, progress }: SeminarModuleListProps) {
             <div className="space-y-1">
               <p className="text-lg font-semibold">Seminar finished</p>
               <p className="text-sm text-foreground/80">
-                Your next step is to complete the applicant information form.
+                Your next step is to submit your application.
               </p>
             </div>
             <Button asChild className="min-w-[240px]">
-              <a href="/applicant/applications/new">Proceed to applicant information</a>
+              <a href={`/applicant/applications/new?applicant=${applicantId}`}>Proceed to application</a>
             </Button>
           </CardContent>
         </Card>
@@ -88,7 +110,7 @@ export function SeminarModuleList({ items, progress }: SeminarModuleListProps) {
   );
 }
 
-function SeminarItemCard({ item, index, completed, isLastPendingItem }: SeminarItemCardProps) {
+function SeminarItemCard({ item, index, completed, isLastPendingItem, applicantId }: SeminarItemCardProps) {
   const [state, formAction, pending] = useActionState(updateSeminarProgressAction, initialActionState);
   const justFinishedSeries = isLastPendingItem && state.success;
 
@@ -107,6 +129,7 @@ function SeminarItemCard({ item, index, completed, isLastPendingItem }: SeminarI
         <p className="text-sm leading-7 text-muted-foreground">{item.description}</p>
         <SeminarMedia item={item} />
         <form action={formAction} className="flex flex-wrap items-center gap-3">
+          <input type="hidden" name="applicantId" value={applicantId} />
           <input type="hidden" name="seminarItemId" value={item.id} />
           <input type="hidden" name="completed" value="true" />
           <Button type="submit" disabled={pending || completed}>
@@ -119,10 +142,10 @@ function SeminarItemCard({ item, index, completed, isLastPendingItem }: SeminarI
         {justFinishedSeries ? (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-4">
             <p className="text-sm font-medium text-emerald-900">
-              You finished the full seminar series. Continue now to the applicant information form.
+              You finished the full seminar series. Continue now to submit your application.
             </p>
             <Button asChild className="mt-3">
-              <a href="/applicant/applications/new">Proceed to applicant information</a>
+              <a href={`/applicant/applications/new?applicant=${applicantId}`}>Proceed to application</a>
             </Button>
           </div>
         ) : null}

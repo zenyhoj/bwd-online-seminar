@@ -36,6 +36,60 @@ export type Database = {
         };
         Relationships: [];
       };
+      applicants: {
+        Row: {
+          id: string;
+          organization_id: string;
+          profile_id: string;
+          full_name: string;
+          gender: string | null;
+          age: number | null;
+          address: string | null;
+          cellphone_number: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          profile_id: string;
+          full_name: string;
+          gender?: string | null;
+          age?: number | null;
+          address?: string | null;
+          cellphone_number?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          profile_id?: string;
+          full_name?: string;
+          gender?: string | null;
+          age?: number | null;
+          address?: string | null;
+          cellphone_number?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "applicants_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "applicants_profile_id_fkey";
+            columns: ["profile_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
       profiles: {
         Row: {
           id: string;
@@ -182,7 +236,7 @@ export type Database = {
             foreignKeyName: "applicant_seminar_progress_applicant_id_fkey";
             columns: ["applicant_id"];
             isOneToOne: false;
-            referencedRelation: "profiles";
+            referencedRelation: "applicants";
             referencedColumns: ["id"];
           },
           {
@@ -289,7 +343,7 @@ export type Database = {
             foreignKeyName: "applications_applicant_id_fkey";
             columns: ["applicant_id"];
             isOneToOne: false;
-            referencedRelation: "profiles";
+            referencedRelation: "applicants";
             referencedColumns: ["id"];
           },
           {
@@ -639,7 +693,7 @@ export type Database = {
             foreignKeyName: "documents_applicant_id_fkey";
             columns: ["applicant_id"];
             isOneToOne: false;
-            referencedRelation: "profiles";
+            referencedRelation: "applicants";
             referencedColumns: ["id"];
           },
           {
@@ -743,7 +797,7 @@ export type Database = {
           id: string;
           organization_id: string;
           application_id: string;
-          profile_id: string;
+          applicant_id: string;
           concessionaire_number: string;
           connection_date: string;
           meter_number: string | null;
@@ -756,7 +810,7 @@ export type Database = {
           id?: string;
           organization_id: string;
           application_id: string;
-          profile_id: string;
+          applicant_id: string;
           concessionaire_number: string;
           connection_date: string;
           meter_number?: string | null;
@@ -769,7 +823,7 @@ export type Database = {
           id?: string;
           organization_id?: string;
           application_id?: string;
-          profile_id?: string;
+          applicant_id?: string;
           concessionaire_number?: string;
           connection_date?: string;
           meter_number?: string | null;
@@ -801,10 +855,10 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "concessionaires_profile_id_fkey";
-            columns: ["profile_id"];
+            foreignKeyName: "concessionaires_applicant_id_fkey";
+            columns: ["applicant_id"];
             isOneToOne: false;
-            referencedRelation: "profiles";
+            referencedRelation: "applicants";
             referencedColumns: ["id"];
           }
         ];

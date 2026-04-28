@@ -42,6 +42,24 @@ export async function scheduleInspectionAction(_prevState: ActionState, formData
       };
     }
 
+    // Prerequisite: in-house plumbing must be completed first
+    const { data: appCheck, error: appCheckError } = await supabase
+      .from("applications")
+      .select("inhouse_installation_completed")
+      .eq("id", parsed.data.applicationId)
+      .single();
+
+    if (appCheckError || !appCheck) {
+      return { success: false, message: "Application not found." };
+    }
+
+    if (!appCheck.inhouse_installation_completed) {
+      return {
+        success: false,
+        message: "In-house plumbing must be completed before scheduling an inspection."
+      };
+    }
+
     const { data: inspector, error: inspectorError } = await supabase
       .from("inspectors")
       .select("id, full_name")

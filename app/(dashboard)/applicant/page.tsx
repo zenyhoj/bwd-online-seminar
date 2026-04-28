@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
-import { ApplicationSwitcher } from "@/components/applicant/application-switcher";
+import { ApplicantSwitcher } from "@/components/applicant/applicant-switcher";
 import { InhouseInstallationForm } from "@/components/shared/inhouse-installation-form";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate, formatDateTime } from "@/lib/format";
-import { getAccreditedPlumbers, getApplicantApplications, getApplicantSeminarState } from "@/lib/queries";
+import { getAccreditedPlumbers, getApplicants, getApplicantApplications, getApplicantSeminarState } from "@/lib/queries";
 
 function getScheduledInspectionDate(application: {
   inspections?: { scheduled_at?: string | null; inspected_at?: string | null }[];
@@ -82,24 +82,33 @@ function getPrimaryAction({
   allCompleted,
   hasApplication,
   hasPayment,
+  selectedApplicantId,
   selectedApplicationId
 }: {
   allCompleted: boolean;
   hasApplication: boolean;
   hasPayment: boolean;
+  selectedApplicantId?: string | null;
   selectedApplicationId?: string | null;
 }) {
+  if (!selectedApplicantId) {
+    return {
+      href: "/applicant/new",
+      label: "Create new applicant"
+    };
+  }
+
   if (!allCompleted) {
     return {
-      href: "/applicant/seminar",
+      href: `/applicant/seminar?applicant=${selectedApplicantId}`,
       label: "Continue seminar"
     };
   }
 
   if (!hasApplication) {
     return {
-      href: "/applicant/applications/new",
-      label: "Applicant information"
+      href: `/applicant/applications/new?applicant=${selectedApplicantId}`,
+      label: "Start application"
     };
   }
 
@@ -129,18 +138,22 @@ function getStringParam(
 
 export default async function ApplicantDashboardPage({ searchParams }: ApplicantDashboardPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const [applications, seminarState, plumbers] = await Promise.all([
-    getApplicantApplications(),
-    getApplicantSeminarState(),
-    getAccreditedPlumbers()
-  ]);
+  
+  const applicants = await getApplicants();
+  const selectedApplicantId = getStringParam(resolvedSearchParams, "applicant") ?? applicants[0]?.id ?? null;
+  const selectedApplicant = applicants.find((a) => a.id === selectedApplicantId) ?? applicants[0];
+
+  const applications = selectedApplicantId ? await getApplicantApplications(selectedApplicantId) : [];
+  const seminarState = selectedApplicantId ? await getApplicantSeminarState(selectedApplicantId) : { items: [], progress: [], completedCount: 0, allCompleted: false };
+  const plumbers = await getAccreditedPlumbers();
 
   const selectedApplicationId = getStringParam(resolvedSearchParams, "application") ?? applications[0]?.id ?? null;
   const selectedApplication = applications.find((application) => application.id === selectedApplicationId) ?? applications[0];
+  
   const latestPayment = selectedApplication ? getLatestPayment(selectedApplication) : null;
   const effectiveWorkflowStatus = selectedApplication ? getEffectiveWorkflowStatus(selectedApplication) : null;
   const latestInspectionSchedule = selectedApplication ? getScheduledInspectionDate(selectedApplication) : null;
-  const selectedApplicantName = selectedApplication?.full_name ?? "No applicant selected";
+  const selectedApplicantName = selectedApplicant?.full_name ?? "No applicant selected";
 
   const historyView = getStringParam(resolvedSearchParams, "history") === "all" ? "all" : "selected";
   const historyApplications = historyView === "all" ? applications : selectedApplication ? [selectedApplication] : [];
@@ -149,17 +162,20 @@ export default async function ApplicantDashboardPage({ searchParams }: Applicant
     allCompleted: seminarState.allCompleted,
     hasApplication: Boolean(selectedApplication),
     hasPayment: Boolean(latestPayment),
+    selectedApplicantId: selectedApplicant?.id,
     selectedApplicationId: selectedApplication?.id
   });
 
   const selectedHistoryHref = (() => {
     const query = new URLSearchParams();
+    if (selectedApplicant?.id) query.set("applicant", selectedApplicant.id);
     if (selectedApplication?.id) query.set("application", selectedApplication.id);
     return `/applicant${query.toString() ? `?${query.toString()}` : ""}`;
   })();
 
   const allHistoryHref = (() => {
     const query = new URLSearchParams();
+    if (selectedApplicant?.id) query.set("applicant", selectedApplicant.id);
     if (selectedApplication?.id) query.set("application", selectedApplication.id);
     query.set("history", "all");
     return `/applicant?${query.toString()}`;
@@ -172,9 +188,9 @@ export default async function ApplicantDashboardPage({ searchParams }: Applicant
         <p className="text-sm text-muted-foreground">Choose the applicant record you want to view.</p>
       </div>
 
-      <ApplicationSwitcher
-        applications={applications}
-        selectedApplicationId={selectedApplication?.id}
+      <ApplicantSwitcher
+        applicants={applicants}
+        selectedApplicantId={selectedApplicant?.id}
         basePath="/applicant"
         queryParams={{ history: historyView === "all" ? "all" : undefined }}
         title="Records"

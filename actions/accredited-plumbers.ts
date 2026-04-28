@@ -233,10 +233,20 @@ export async function updateInhouseInstallationAction(
       return { success: false, message: "Application not found." };
     }
 
-    const canManage =
-      profile.role === "admin"
-        ? application.organization_id === profile.organization_id
-        : profile.role === "applicant" && application.applicant_id === profile.id;
+    let canManage = false;
+
+    if (profile.role === "admin") {
+      canManage = application.organization_id === profile.organization_id;
+    } else if (profile.role === "applicant") {
+      // applicant_id references the applicants table, not the profile directly
+      const { data: applicantRecord } = await supabase
+        .from("applicants")
+        .select("id")
+        .eq("id", application.applicant_id)
+        .eq("profile_id", profile.id)
+        .maybeSingle();
+      canManage = Boolean(applicantRecord);
+    }
 
     if (!canManage) {
       return { success: false, message: "You are not allowed to update this installation record." };

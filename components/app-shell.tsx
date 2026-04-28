@@ -25,6 +25,7 @@ import type { AppRole, Profile } from "@/types";
 type AppShellProps = {
   profile: Profile;
   applicantNavMode?: "preseminar" | "hasApplication" | "newApplication";
+  navBadges?: Record<string, number>;
   children: React.ReactNode;
 };
 
@@ -54,7 +55,7 @@ const navByRole: Record<AppRole, { href: string; label: string; icon: React.Comp
 function getApplicantNavItems(mode: "preseminar" | "hasApplication" | "newApplication") {
   if (mode === "preseminar") {
     return [
-      { href: "/applicant/seminar", label: "Applicant info", icon: FileCheck2 },
+      { href: "/applicant/seminar", label: "Seminar", icon: BookOpenText },
       { href: "/applicant", label: "Dashboard", icon: Home },
       { href: "/applicant/documents", label: "Documents", icon: ShieldCheck },
       { href: "/applicant/payments", label: "Payments", icon: CreditCard }
@@ -74,7 +75,7 @@ function getApplicantNavItems(mode: "preseminar" | "hasApplication" | "newApplic
   return navByRole.applicant;
 }
 
-export function AppShell({ profile, applicantNavMode = "newApplication", children }: AppShellProps) {
+export function AppShell({ profile, applicantNavMode = "newApplication", navBadges = {}, children }: AppShellProps) {
   const pathname = usePathname();
   const navItems =
     profile.role === "applicant"
@@ -84,40 +85,45 @@ export function AppShell({ profile, applicantNavMode = "newApplication", childre
   return (
     <div className="min-h-screen bg-transparent">
       <div className="mx-auto grid max-w-7xl gap-6 px-6 py-8 lg:grid-cols-[240px_1fr]">
-        <Card className="relative h-fit overflow-hidden border-0 bg-[linear-gradient(180deg,#000000,#1e2c4a)] p-4 text-white shadow-[0_24px_60px_-30px_rgba(0,0,0,0.65)]">
-          <div className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,#000000,#1e2c4a,#ffa41c,#d9d9d9,#ffffff)]" />
+        <Card className="relative h-fit border-border/70 p-4 shadow-sm">
           <div className="mb-6 space-y-1">
-            <p className="text-xs uppercase tracking-[0.24em] text-white/65">BWD Online</p>
+            <p className="text-xs uppercase tracking-[0.24em] text-muted-foreground">BWD Online</p>
             <h1 className="text-lg font-semibold">{profile.full_name}</h1>
-            <p className="text-sm capitalize text-white/72">{profile.role}</p>
+            <p className="text-sm capitalize text-muted-foreground">{profile.role}</p>
           </div>
-          <nav className="space-y-2">
+          <nav className="space-y-1">
             {navItems.map((item) => {
               const isActive =
                 pathname === item.href || (item.href !== `/${profile.role}` && pathname.startsWith(`${item.href}/`));
+              const badge = navBadges[item.href] ?? 0;
 
               return (
                 <Link
                   key={`${item.href}-${item.label}`}
                   href={item.href as never}
                   aria-current={isActive ? "page" : undefined}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
+                  className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
                     isActive
-                      ? "bg-[linear-gradient(135deg,rgba(255,164,28,0.96),rgba(255,143,0,0.92))] font-semibold text-black shadow-[0_12px_24px_-18px_rgba(255,164,28,0.95)]"
-                      : "text-white/88 hover:bg-white/12 hover:text-white"
+                      ? "bg-muted font-medium text-foreground"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                   }`}
                 >
-                  <item.icon className={`h-4 w-4 ${isActive ? "text-black" : "text-white/70"}`} />
-                  {item.label}
+                  <item.icon className="h-4 w-4 shrink-0" />
+                  <span className="flex-1">{item.label}</span>
+                  {badge > 0 && (
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-none text-primary-foreground">
+                      {badge > 99 ? "99+" : badge}
+                    </span>
+                  )}
                 </Link>
               );
             })}
           </nav>
-          <form action={signOutAction} className="mt-6">
+          <form action={signOutAction} className="mt-8">
             <Button
               type="submit"
               variant="outline"
-              className="w-full justify-start gap-2 border-white/20 bg-white/8 text-white hover:bg-white/16"
+              className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
             >
               <LogOut className="h-4 w-4" />
               Sign out

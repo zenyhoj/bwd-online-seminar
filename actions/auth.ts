@@ -68,7 +68,6 @@ export async function registerAction(_prevState: ActionState, formData: FormData
       email: formData.get("email"),
       password: formData.get("password"),
       fullName: formData.get("fullName"),
-      customerType: formData.get("customerType"),
       acceptPrivacyNotice: formData.get("acceptPrivacyNotice") === "on"
     });
 
@@ -88,10 +87,12 @@ export async function registerAction(_prevState: ActionState, formData: FormData
       return { success: false, message: "No water district organization is configured for registration yet." };
     }
 
-    const supabase = await createSupabaseServerClient();
-    const { data: authResult, error } = await supabase.auth.signUp({
+    // Use admin client to create the user with email pre-confirmed,
+    // so the applicant can log in immediately without clicking a verification link.
+    const { data: authResult, error } = await adminClient.auth.admin.createUser({
       email: parsed.data.email,
-      password: parsed.data.password
+      password: parsed.data.password,
+      email_confirm: true
     });
 
     if (error || !authResult.user) {
@@ -102,7 +103,6 @@ export async function registerAction(_prevState: ActionState, formData: FormData
       id: authResult.user.id,
       organization_id: organization.id,
       role: "applicant",
-      customer_type: parsed.data.customerType,
       full_name: parsed.data.fullName
     });
 

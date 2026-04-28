@@ -19,11 +19,8 @@ export function ConcessionaireForm({ applicationId, profileId }: ConcessionaireF
   const [state, formAction, pending] = useActionState(createConcessionaireAction, initialActionState);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Convert to concessionaire</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <div className="space-y-4">
+      <h3 className="font-semibold">Convert to concessionaire</h3>
         <form action={formAction} className="grid gap-4 md:grid-cols-2">
           <input type="hidden" name="applicationId" value={applicationId} />
           <input type="hidden" name="profileId" value={profileId} />
@@ -48,7 +45,6 @@ export function ConcessionaireForm({ applicationId, profileId }: ConcessionaireF
             </Button>
           </div>
         </form>
-      </CardContent>
-    </Card>
+    </div>
   );
 }

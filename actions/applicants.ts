@@ -1,0 +1,56 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+
+import { getActionContext, parseFormData, withErrorHandling } from "@/actions/_helpers";
+import type { ActionState } from "@/types";
+
+const applicantSchema = z.object({
+  lastName: z.string().min(2, "Last name must be at least 2 characters"),
+  firstName: z.string().min(2, "First name must be at least 2 characters"),
+  middleInitial: z.string().trim().max(3).optional(),
+  sex: z.enum(["Male", "Female"]),
+  age: z.coerce.number().int().min(1).max(120),
+  address: z.string().min(10, "Address must be at least 10 characters"),
+  cellphoneNumber: z.string().min(11).max(20)
+});
+
+export async function createApplicantAction(_prevState: ActionState, formData: FormData): Promise<ActionState> {
+  return withErrorHandling(async () => {
+    const { supabase, profile } = await getActionContext();
+    const parsed = await parseFormData(applicantSchema, {
+      lastName: formData.get("lastName"),
+      firstName: formData.get("firstName"),
+      middleInitial: formData.get("middleInitial"),
+      sex: formData.get("sex"),
+      age: formData.get("age"),
+      address: formData.get("address"),
+      cellphoneNumber: formData.get("cellphoneNumber")
+    });
+
+    if (parsed.error) {
+      return parsed.error;
+    }
+
+    const middleInitial = parsed.data.middleInitial?.trim();
+    const fullName = `${parsed.data.lastName}, ${parsed.data.firstName}${middleInitial ? ` ${middleInitial}` : ""}`.trim();
+
+    const { error } = await supabase.from("applicants").insert({
+      organization_id: profile.organization_id,
+      profile_id: profile.id,
+      full_name: fullName,
+      gender: parsed.data.sex,
+      age: parsed.data.age,
+      address: parsed.data.address,
+      cellphone_number: parsed.data.cellphoneNumber
+    });
+
+    if (error) {
+      return { success: false, message: error.message };
+    }
+
+    revalidatePath("/applicant");
+    return { success: true, message: "Applicant created successfully." };
+  });
+}

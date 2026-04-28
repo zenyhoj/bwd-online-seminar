@@ -73,6 +73,22 @@ create table public.profiles (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+create table public.applicants (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations (id) on delete restrict,
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  full_name text not null,
+  gender text,
+  age integer check (age >= 0),
+  address text,
+  cellphone_number text,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create trigger handle_updated_at before update on public.applicants
+  for each row execute procedure public.set_updated_at();
+
 create table public.accredited_plumbers (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations (id) on delete cascade,
@@ -101,7 +117,7 @@ create table public.inspectors (
 create table public.applications (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations (id) on delete restrict,
-  applicant_id uuid not null references public.profiles (id) on delete cascade,
+  applicant_id uuid not null references public.applicants (id) on delete cascade,
   accredited_plumber_id uuid references public.accredited_plumbers (id) on delete set null,
   cellphone_number text,
   service_type public.application_service_type not null,
@@ -129,7 +145,7 @@ create table public.seminar_items (
   organization_id uuid not null references public.organizations (id) on delete cascade,
   title text not null,
   description text not null,
-  media_type text not null default 'text' check (media_type in ('text', 'image', 'video')),
+  media_type text not null default 'text' check (media_type in ('text', 'image', 'video', 'pdf')),
   media_url text,
   display_order integer not null default 0,
   is_active boolean not null default true,
@@ -141,7 +157,7 @@ create table public.seminar_items (
 create table public.applicant_seminar_progress (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations (id) on delete cascade,
-  applicant_id uuid not null references public.profiles (id) on delete cascade,
+  applicant_id uuid not null references public.applicants (id) on delete cascade,
   seminar_item_id uuid not null references public.seminar_items (id) on delete cascade,
   completed boolean not null default false,
   completed_at timestamptz,
@@ -191,7 +207,7 @@ create table public.documents (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations (id) on delete restrict,
   application_id uuid not null references public.applications (id) on delete cascade,
-  applicant_id uuid not null references public.profiles (id) on delete cascade,
+  applicant_id uuid not null references public.applicants (id) on delete cascade,
   document_type public.document_type not null,
   file_path text not null,
   file_url text not null,
@@ -227,7 +243,7 @@ create table public.concessionaires (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations (id) on delete restrict,
   application_id uuid not null unique references public.applications (id) on delete restrict,
-  profile_id uuid not null references public.profiles (id) on delete restrict,
+  applicant_id uuid not null references public.applicants (id) on delete restrict,
   concessionaire_number text not null,
   connection_date date not null,
   meter_number text,
@@ -323,3 +339,7 @@ for each row execute function public.set_updated_at();
 insert into storage.buckets (id, name, public)
 values ('application-documents', 'application-documents', false)
 on conflict (id) do nothing;
+
+insert into storage.buckets (id, name, public)
+values ('seminar-media', 'seminar-media', true)
+on conflict (id) do update set public = true;

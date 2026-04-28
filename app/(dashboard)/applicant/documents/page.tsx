@@ -1,13 +1,15 @@
+import { redirect } from "next/navigation";
+import { ApplicantSwitcher } from "@/components/applicant/applicant-switcher";
 import { ApplicationSwitcher } from "@/components/applicant/application-switcher";
 import { DocumentUploadForm } from "@/components/applicant/document-upload-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { getDocumentDownloadHref } from "@/lib/document-links";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getCurrentProfile } from "@/lib/auth";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { documentTypeLabels } from "@/lib/constants";
-import type { Application, DocumentType } from "@/types";
+import { getApplicants, getApplicantApplications } from "@/lib/queries";
+import type { DocumentType } from "@/types";
 
 type ApplicantDocumentsPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -22,16 +24,19 @@ function getStringParam(
 
 export default async function ApplicantDocumentsPage({ searchParams }: ApplicantDocumentsPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const supabase = await createSupabaseServerClient();
-  const profile = await getCurrentProfile();
-  const { data: applications } = await supabase
-    .from("applications")
-    .select("id, full_name, service_type, status, submitted_at, organization_id, applicant_id, accredited_plumber_id, cellphone_number, gender, age, address, number_of_users, inhouse_installation_completed, inhouse_installation_completed_at, inhouse_installation_updated_by, seminar_completed, reviewed_at, rejection_reason, created_at, updated_at")
-    .eq("applicant_id", profile.id)
-    .order("created_at", { ascending: false })
-    .returns<Application[]>();
+  // Use admin client — ownership is already verified via getApplicants().
+  const supabase = createSupabaseAdminClient();
 
-  const applicationList = applications ?? [];
+  const applicants = await getApplicants();
+  const selectedApplicantId = getStringParam(resolvedSearchParams, "applicant") ?? applicants[0]?.id ?? null;
+
+  if (!selectedApplicantId && applicants.length === 0) {
+    redirect("/applicant");
+  }
+
+  const effectiveApplicantId = selectedApplicantId ?? applicants[0]?.id ?? null;
+  const applicationList = effectiveApplicantId ? await getApplicantApplications(effectiveApplicantId) : [];
+
   const selectedApplicationId = getStringParam(resolvedSearchParams, "application") ?? applicationList[0]?.id ?? null;
   const application = applicationList.find((item) => item.id === selectedApplicationId) ?? applicationList[0] ?? null;
 
@@ -45,13 +50,24 @@ export default async function ApplicantDocumentsPage({ searchParams }: Applicant
         <h1 className="text-3xl font-semibold">Documents</h1>
         <p className="text-sm text-muted-foreground">Upload and monitor document verification status.</p>
       </div>
-      <ApplicationSwitcher
-        applications={applicationList}
-        selectedApplicationId={application?.id}
+      <ApplicantSwitcher
+        applicants={applicants}
+        selectedApplicantId={effectiveApplicantId}
         basePath="/applicant/documents"
+        queryParams={{ application: selectedApplicationId ?? undefined }}
         title="Choose applicant"
-        description="Switch between applicant records to upload and review the correct documents."
+        description="Switch between applicants to view their documents."
       />
+      {applicationList.length > 1 ? (
+        <ApplicationSwitcher
+          applications={applicationList}
+          selectedApplicationId={application?.id}
+          basePath="/applicant/documents"
+          queryParams={{ applicant: effectiveApplicantId ?? undefined }}
+          title="Choose application"
+          description="This applicant has multiple applications. Choose one to view documents."
+        />
+      ) : null}
       {application ? <DocumentUploadForm applicationId={application.id} /> : null}
       <Card>
         <CardHeader>

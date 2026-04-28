@@ -123,23 +123,40 @@ export async function updatePaymentStatusAction(_prevState: ActionState, formDat
     const parsed = await parseFormData(paymentStatusSchema, {
       paymentId: formData.get("paymentId"),
       status: formData.get("status"),
-      amount: formData.get("amount"),
-      officialReceiptNumber: formData.get("officialReceiptNumber"),
-      notes: formData.get("notes")
+      amount: formData.get("amount") || undefined,
+      officialReceiptNumber: formData.get("officialReceiptNumber") || undefined,
+      paidAt: formData.get("paidAt") || undefined,
+      officePaymentAt: formData.get("officePaymentAt") || undefined
     });
 
     if (parsed.error) {
       return parsed.error;
     }
 
+    if (parsed.data.status === "paid" && parsed.data.amount === undefined) {
+      return { success: false, message: "Official receipt amount is required to confirm payment." };
+    }
+
     const { data: paymentRecord, error: paymentRecordError } = await supabase
       .from("payments")
-      .select("application_id")
+      .select("application_id, office_payment_at")
       .eq("id", parsed.data.paymentId)
       .maybeSingle();
 
     if (paymentRecordError || !paymentRecord) {
       return { success: false, message: paymentRecordError?.message ?? "Payment record not found." };
+    }
+
+    if (parsed.data.status === "paid" && parsed.data.paidAt && paymentRecord.office_payment_at) {
+      const paidAtTime = new Date(parsed.data.paidAt).getTime();
+      const officePaymentTime = new Date(paymentRecord.office_payment_at).getTime();
+      
+      if (paidAtTime < officePaymentTime) {
+        return {
+          success: false,
+          message: "Date of payment cannot be earlier than the scheduled office payment date."
+        };
+      }
     }
 
     const { data: applicationRecord, error: applicationRecordError } = await supabase
@@ -158,8 +175,15 @@ export async function updatePaymentStatusAction(_prevState: ActionState, formDat
         status: parsed.data.status,
         amount: parsed.data.amount,
         official_receipt_number: parsed.data.officialReceiptNumber,
-        notes: parsed.data.notes,
-        paid_at: parsed.data.status === "paid" ? new Date().toISOString() : null
+        paid_at: parsed.data.status === "paid"
+          ? (parsed.data.paidAt ? new Date(parsed.data.paidAt).toISOString() : new Date().toISOString())
+          : null,
+        office_payment_at: parsed.data.status === "scheduled" && parsed.data.officePaymentAt
+          ? new Date(parsed.data.officePaymentAt).toISOString()
+          : undefined,
+        due_date: parsed.data.status === "scheduled" && parsed.data.officePaymentAt
+          ? new Date(parsed.data.officePaymentAt).toISOString()
+          : undefined
       })
       .eq("id", parsed.data.paymentId);
 

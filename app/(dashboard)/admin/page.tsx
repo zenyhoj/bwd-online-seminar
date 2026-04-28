@@ -91,13 +91,13 @@ function nextAction(record: Record<string, unknown>) {
     (inspection) => inspection.status === "approved"
   );
   const hasScheduledInspection = inspections.length > 0;
-  const installationComplete = Boolean(record.inhouse_installation_completed);
+  const inhousePlumbingComplete = Boolean(record.inhouse_installation_completed);
 
   if (converted || status === "converted") return "Completed";
+  if (!inhousePlumbingComplete) return "Complete in-house plumbing";
   if (!hasScheduledInspection) return "Schedule inspection";
   if (!hasApprovedInspection) return "Await inspection result";
   if (payments === 0) return "Schedule payment";
-  if (!installationComplete) return "Mark installation complete";
   if (status === "approved") return "Convert account";
   return "Review payment and conversion";
 }
@@ -117,19 +117,21 @@ function queueStage(record: Record<string, unknown>) {
     (inspection) => inspection.status === "approved"
   );
   const hasScheduledInspection = inspections.length > 0;
-  const installationComplete = Boolean(record.inhouse_installation_completed);
+  const inhousePlumbingComplete = Boolean(record.inhouse_installation_completed);
 
   if (converted || status === "converted") return "completed";
+  if (!inhousePlumbingComplete) return "for-inhouse-plumbing";
   if (!hasScheduledInspection) return "for-inspection";
   if (!hasApprovedInspection) return "under-review";
   if (payments === 0) return "for-payment";
-  if (!installationComplete) return "for-installation";
   if (status === "approved") return "for-conversion";
   return "under-review";
 }
 
 function queueStageLabel(stage: string) {
   switch (stage) {
+    case "for-inhouse-plumbing":
+      return "For inhouse plumbing";
     case "for-inspection":
       return "For inspection";
     case "under-review":
@@ -151,115 +153,27 @@ function workflowStepState({
   inspections,
   payments,
   applicationStatus,
-  installationCompleted
+  inhousePlumbingCompleted
 }: {
   inspections: { status?: string; scheduled_at?: string | null }[];
   payments: Payment[];
   applicationStatus: string;
-  installationCompleted: boolean;
+  inhousePlumbingCompleted: boolean;
 }) {
   const hasScheduledInspection = inspections.length > 0;
   const hasApprovedInspection = inspections.some((inspection) => inspection.status === "approved");
   const hasPayment = payments.length > 0;
 
   return {
-    inspection: hasApprovedInspection ? "Complete" : hasScheduledInspection ? "Scheduled" : "Pending",
+    plumbing: inhousePlumbingCompleted ? "Complete" : "Pending",
+    inspection: !inhousePlumbingCompleted ? "Waiting" : hasApprovedInspection ? "Complete" : hasScheduledInspection ? "Scheduled" : "Pending",
     payment: hasPayment ? "Scheduled" : hasApprovedInspection ? "Ready" : "Waiting",
-    installation: installationCompleted ? "Complete" : hasPayment ? "Ready" : "Waiting",
     conversion:
       applicationStatus === "converted" ? "Complete" : applicationStatus === "approved" ? "Ready" : "Waiting"
   };
 }
 
-function StageTable({
-  title,
-  description,
-  records,
-  selectedId,
-  page,
-  pageSize,
-  q,
-  workflow
-}: {
-  title: string;
-  description: string;
-  records: Record<string, unknown>[];
-  selectedId: string;
-  page: number;
-  pageSize: number;
-  q: string;
-  workflow: string;
-}) {
-  if (records.length === 0) {
-    return null;
-  }
 
-  return (
-    <Card className="overflow-hidden border-border/70 shadow-sm">
-      <CardHeader>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <CardTitle>{title}</CardTitle>
-            <p className="text-sm text-muted-foreground">{description}</p>
-          </div>
-          <div className="rounded-full border border-border/70 bg-muted/40 px-3 py-1 text-sm font-medium text-foreground">
-            {records.length}
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Applicant</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Inspection schedule</TableHead>
-              <TableHead>Installation</TableHead>
-              <TableHead>Next action</TableHead>
-              <TableHead>Submitted</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {records.map((record) => {
-              const isSelected = String(record.id) === selectedId;
-              const query = new URLSearchParams();
-              query.set("page", String(page));
-              query.set("pageSize", String(pageSize));
-              if (q) query.set("q", q);
-              if (workflow && workflow !== "all") query.set("workflow", workflow);
-              query.set("selected", String(record.id));
-
-              return (
-                <TableRow
-                  key={String(record.id)}
-                  className={isSelected ? "border-l-4 border-l-primary bg-primary/5" : "hover:bg-muted/20"}
-                >
-                  <TableCell>
-                    <div>
-                      <p className="font-medium">{String(record.full_name)}</p>
-                      <p className="text-xs text-muted-foreground">{String(record.service_type).replaceAll("_", " ")}</p>
-                    </div>
-                  </TableCell>
-                  <TableCell><StatusBadge status={getEffectiveApplicationStatus(record)} /></TableCell>
-                  <TableCell>{formatDateTime(getScheduledInspectionDate(record))}</TableCell>
-                  <TableCell>{Boolean(record.inhouse_installation_completed) ? "Complete" : "Pending"}</TableCell>
-                  <TableCell>{nextAction(record)}</TableCell>
-                  <TableCell>{formatDateTime((record.submitted_at as string | null | undefined) ?? null)}</TableCell>
-                  <TableCell className="text-right">
-                    <Button asChild variant={isSelected ? "secondary" : "outline"} size="sm">
-                      <Link href={`/admin?${query.toString()}` as never}>{isSelected ? "Selected" : "Manage"}</Link>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  );
-}
 
 export default async function AdminDashboardPage({ searchParams }: AdminDashboardPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
@@ -286,7 +200,6 @@ export default async function AdminDashboardPage({ searchParams }: AdminDashboar
   const hasActiveFilters = Boolean(q) || workflow !== "all";
   const noQueueResults = applications.data.length === 0;
   const hasMatchesInOtherStages = Boolean(searchMatchesAcrossAllStages && searchMatchesAcrossAllStages.count > 0);
-  const showStageTables = workflow === "all";
 
   const readyForInspection = applications.data.filter((item) => {
     const inspections = ((item.inspections as { id?: string }[] | undefined) ?? []);
@@ -299,6 +212,11 @@ export default async function AdminDashboardPage({ searchParams }: AdminDashboar
   }).length;
   const readyForConversionEffective = applications.data.filter((item) => getEffectiveApplicationStatus(item as Record<string, unknown>) === "approved").length;
   const workflowStages = [
+    {
+      key: "for-inhouse-plumbing",
+      title: "For inhouse plumbing",
+      description: "Applicants pending in-house plumbing completion."
+    },
     {
       key: "for-inspection",
       title: "For inspection",
@@ -315,11 +233,6 @@ export default async function AdminDashboardPage({ searchParams }: AdminDashboar
       description: "Applicants with approved inspections waiting for office payment scheduling."
     },
     {
-      key: "for-installation",
-      title: "For installation",
-      description: "Applicants with payment scheduled and waiting for installation completion."
-    },
-    {
       key: "for-conversion",
       title: "For conversion",
       description: "Applicants ready for final conversion."
@@ -330,14 +243,7 @@ export default async function AdminDashboardPage({ searchParams }: AdminDashboar
       description: "Applicants already converted and finished."
     }
   ] as const;
-  const grouped = new Map<string, Record<string, unknown>[]>();
-  for (const stage of workflowStages) grouped.set(stage.key, []);
-  for (const item of applications.data as Record<string, unknown>[]) {
-    const stage = queueStage(item);
-    grouped.set(stage, [...(grouped.get(stage) ?? []), item]);
-  }
-  const visibleStages =
-    workflow === "all" ? workflowStages : workflowStages.filter((stage) => stage.key === workflow);
+
 
   const selectedDocuments = ((selectedApplication?.documents as Document[] | undefined) ?? []);
   const selectedPayments = ((selectedApplication?.payments as Payment[] | undefined) ?? []);
@@ -355,12 +261,13 @@ export default async function AdminDashboardPage({ searchParams }: AdminDashboar
   const latestSelectedInspection =
     [...selectedInspections]
       .sort((a, b) => new Date(b.scheduled_at ?? 0).getTime() - new Date(a.scheduled_at ?? 0).getTime())[0] ?? null;
+  const inhousePlumbingCompleted = Boolean(selectedApplication?.inhouse_installation_completed);
+  const canScheduleInspection = inhousePlumbingCompleted;
   const canSchedulePayment = selectedInspections.some(
     (inspection) => inspection.status === "approved"
   );
   const canMarkInstallationComplete =
-    selectedPayments.length > 0 ||
-    ["payment_scheduled", "approved", "converted"].includes(selectedApplicationStatus);
+    Boolean(selectedApplication) && selectedApplicationStatus !== "converted";
   const inspectionWorkflowComplete =
     canSchedulePayment ||
     ["inspection_completed", "payment_scheduled", "approved", "converted"].includes(selectedApplicationStatus);
@@ -374,7 +281,7 @@ export default async function AdminDashboardPage({ searchParams }: AdminDashboar
     inspections: selectedInspections,
     payments: selectedPayments,
     applicationStatus: selectedApplicationStatus,
-    installationCompleted: Boolean(selectedApplication?.inhouse_installation_completed)
+    inhousePlumbingCompleted
   });
 
   return (
@@ -438,46 +345,7 @@ export default async function AdminDashboardPage({ searchParams }: AdminDashboar
             <Button type="submit">Apply filters</Button>
           </form>
 
-          <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
-            {workflowStages.map((stage) => {
-              const query = new URLSearchParams();
-              query.set("page", "1");
-              query.set("pageSize", String(applications.pageSize));
-              if (q) query.set("q", q);
-              query.set("workflow", stage.key);
-              if (selectedId) query.set("selected", selectedId);
 
-              const isSelected = workflow === stage.key;
-
-              return (
-                <Link
-                  key={stage.key}
-                  href={`/admin?${query.toString()}` as never}
-                  className={`rounded-lg border p-3 transition ${
-                    isSelected
-                      ? "border-primary bg-primary/5 shadow-sm"
-                      : "border-border/80 bg-background/70 hover:border-primary/40"
-                  }`}
-                >
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{stage.title}</p>
-                  <p className="mt-2 text-2xl font-semibold">{grouped.get(stage.key)?.length ?? 0}</p>
-                </Link>
-              );
-            })}
-            {workflow !== "all" ? (
-              <Link
-                href={`/admin?${new URLSearchParams({
-                  page: "1",
-                  pageSize: String(applications.pageSize),
-                  ...(q ? { q } : {}),
-                  ...(selectedId ? { selected: selectedId } : {})
-                }).toString()}` as never}
-                className="rounded-lg border border-dashed border-border/80 bg-background/60 p-3 text-sm text-muted-foreground hover:border-primary/40"
-              >
-                Show all stages
-              </Link>
-            ) : null}
-          </div>
 
           {!noQueueResults ? (
             <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
@@ -579,29 +447,13 @@ export default async function AdminDashboardPage({ searchParams }: AdminDashboar
         </CardContent>
       </Card>
 
-      {!noQueueResults && showStageTables ? (
-        <div className="space-y-4">
-          {visibleStages.map((stage) => (
-            <StageTable
-              key={stage.key}
-              title={stage.title}
-              description={stage.description}
-              records={grouped.get(stage.key) ?? []}
-              selectedId={selectedId}
-              page={applications.page}
-              pageSize={applications.pageSize}
-              q={q}
-              workflow={workflow}
-            />
-          ))}
-        </div>
-      ) : null}
+
 
       {selectedApplication ? (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,1fr)]">
+        <div className="mx-auto max-w-4xl space-y-6 pb-12">
           <div className="space-y-6">
             <Card className="overflow-hidden border-border/70 shadow-sm">
-              <CardHeader>
+              <CardHeader className="border-b border-border/50 bg-muted/10">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -618,135 +470,166 @@ export default async function AdminDashboardPage({ searchParams }: AdminDashboar
                   <StatusBadge status={getEffectiveApplicationStatus(selectedApplication as Record<string, unknown>)} />
                 </div>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <CardContent className="p-0">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border/50 px-6 py-4 text-sm">
                   {[
-                    { label: "1. Inspection", value: stepState.inspection },
-                    { label: "2. Payment", value: stepState.payment },
-                    { label: "3. Installation", value: stepState.installation },
-                    { label: "4. Conversion", value: stepState.conversion }
-                  ].map((step) => (
-                    <div key={step.label} className="rounded-2xl border border-border/80 bg-muted/20 p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{step.label}</p>
-                      <p className="mt-3 text-lg font-semibold">{step.value}</p>
+                    { label: "In-house plumbing", value: stepState.plumbing },
+                    { label: "Inspection", value: stepState.inspection },
+                    { label: "Payment", value: stepState.payment },
+                    { label: "Conversion", value: stepState.conversion }
+                  ].map((step, idx) => (
+                    <div key={step.label} className="flex items-center gap-2">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
+                        {idx + 1}
+                      </span>
+                      <span className="font-medium text-foreground">{step.label}</span>
+                      <span className="text-muted-foreground">•</span>
+                      <span className={step.value === "Complete" ? "text-primary font-medium" : step.value === "Waiting" ? "text-muted-foreground/50" : "text-muted-foreground"}>
+                        {step.value}
+                      </span>
                     </div>
                   ))}
                 </div>
 
-                <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-                  <div className="rounded-2xl border border-border/80 bg-muted/10 p-5">
+                <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)] divide-y lg:divide-y-0 lg:divide-x divide-border/50">
+                  <div className="p-6">
                     <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Current details</p>
-                    <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <dl className="mt-4 grid gap-4 sm:grid-cols-2 text-sm">
                       <div>
-                        <dt className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Inspection schedule</dt>
+                        <dt className="text-muted-foreground">Inspection schedule</dt>
                         <dd className="mt-1 font-medium">{formatDateTime(selectedInspectionSchedule)}</dd>
                       </div>
                       <div>
-                        <dt className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Inspection result</dt>
+                        <dt className="text-muted-foreground">Inspection result</dt>
                         <dd className="mt-1">
                           <StatusBadge status={latestSelectedInspection?.status ?? "Not scheduled"} />
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Uploaded documents</dt>
+                        <dt className="text-muted-foreground">Uploaded documents</dt>
                         <dd className="mt-1 font-medium">{selectedDocuments.length}</dd>
                       </div>
                       <div>
-                        <dt className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Payment records</dt>
+                        <dt className="text-muted-foreground">Payment records</dt>
                         <dd className="mt-1 font-medium">{selectedPayments.length}</dd>
                       </div>
                     </dl>
                   </div>
 
-                  <div className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-5">
+                  <div className="p-6 bg-primary/[0.02]">
                     <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Next action</p>
-                    <p className="mt-3 text-xl font-semibold">{nextAction(selectedApplication)}</p>
+                    <p className="mt-3 text-lg font-semibold">{nextAction(selectedApplication)}</p>
                     <p className="mt-2 text-sm text-muted-foreground">
-                      {inspectionWorkflowComplete
-                        ? "Inspection is already complete. Continue with payment scheduling, then installation, before conversion."
-                        : "Finish the remaining inspection steps before moving to payment scheduling."}
+                      {!inhousePlumbingCompleted
+                        ? "In-house plumbing must be completed by the applicant before scheduling an inspection."
+                        : inspectionWorkflowComplete
+                          ? "Inspection is already complete. Continue with payment scheduling before conversion."
+                          : "Finish the remaining inspection steps before moving to payment scheduling."}
                     </p>
+                  </div>
+                </div>
+
+                <div className="border-t border-border/50 p-6">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground mb-4">Document verification</p>
+                  <div className="space-y-4">
+                    {selectedDocuments.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No uploaded documents yet.</p>
+                    ) : (
+                      selectedDocuments.map((document) => <DocumentReviewForm key={document.id} document={document} />)
+                    )}
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {!inspectionWorkflowComplete ? (
-              <div className="space-y-2">
-                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Inspection step</p>
-                <InspectionSchedulerForm applicationId={String(selectedApplication.id)} inspectors={inspectors} />
-              </div>
-            ) : null}
-
-            <Card className="border-border/70 shadow-sm">
-              <CardHeader><CardTitle>Document verification</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                {selectedDocuments.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No uploaded documents yet.</p>
-                ) : (
-                  selectedDocuments.map((document) => <DocumentReviewForm key={document.id} document={document} />)
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="space-y-6">
-            <Card className="border-border/70 shadow-sm">
-              <CardHeader>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <CardTitle>Office payment scheduling</CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      Set the date when the applicant should go to the BWD office for payment.
-                    </p>
-                  </div>
-                  <StatusBadge status={canSchedulePayment ? "Ready to schedule" : "Waiting for inspection approval"} />
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {latestSelectedPayment ? (
-                  <div className="rounded-lg border border-border/80 bg-muted/30 p-3 text-sm text-muted-foreground">
-                    {latestSelectedPayment.status === "paid"
-                      ? "Payment is already marked as paid. Details are shown below in read-only mode."
-                      : "A payment schedule already exists for this application. Update it below if needed."}
-                  </div>
-                ) : null}
-                <PaymentSchedulerForm
-                  applicationId={String(selectedApplication.id)}
-                  payment={latestSelectedPayment ?? undefined}
-                  canSchedule={canSchedulePayment}
-                  scheduleHint="You can schedule the office payment date here after the inspection is approved."
-                />
-              </CardContent>
-            </Card>
-            <InstallationSchedulerForm
-              applicationId={String(selectedApplication.id)}
-              scheduledAt={(selectedApplication.inhouse_installation_scheduled_at as string | null | undefined) ?? null}
-              canSchedule={Boolean(canScheduleInstallation)}
-            />
-            {canMarkInstallationComplete ? (
-              <div className="space-y-2">
-                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Installation step</p>
+            {!inhousePlumbingCompleted ? (
+              <div className="mt-6 space-y-2">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">In-house plumbing step</p>
                 <InhouseInstallationForm
                   applicationId={String(selectedApplication.id)}
                   plumbers={plumbers}
                   currentPlumberId={(selectedApplication.accredited_plumber_id as string | null | undefined) ?? null}
-                  isCompleted={Boolean(selectedApplication.inhouse_installation_completed)}
+                  isCompleted={false}
                   variant="admin"
                 />
               </div>
-            ) : (
-              <Card className="border-border/70 shadow-sm">
-                <CardHeader><CardTitle>Inhouse installation</CardTitle></CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  Mark installation complete after the office payment date has been scheduled.
-                </CardContent>
-              </Card>
-            )}
-            <ConcessionaireForm
-              applicationId={String(selectedApplication.id)}
-              profileId={String(selectedApplication.applicant_id)}
-            />
+            ) : !inspectionWorkflowComplete ? (
+              <div className="mt-6 space-y-2">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Inspection step</p>
+                <InspectionSchedulerForm
+                  applicationId={String(selectedApplication.id)}
+                  inspectors={inspectors}
+                  existingInspection={
+                    latestSelectedInspection?.id
+                      ? {
+                          id: String(latestSelectedInspection.id),
+                          status: latestSelectedInspection.status,
+                          scheduled_at: latestSelectedInspection.scheduled_at,
+                          inspector_name: (latestSelectedInspection as Record<string, unknown>).inspector_name as string | null ?? null
+                        }
+                      : null
+                  }
+                />
+              </div>
+            ) : null}
+          </div>
+
+          <div>
+            <Card className="border-border/70 shadow-sm xl:sticky xl:top-6">
+              <CardHeader className="border-b border-border/50 bg-muted/10 pb-4">
+                <CardTitle>Workflow actions</CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Manage the next steps for this application.
+                </p>
+              </CardHeader>
+              <CardContent className="p-0 divide-y divide-border/50">
+                <div className="p-6">
+                  {latestSelectedPayment ? (
+                    <div className="mb-4 rounded-lg border border-border/80 bg-muted/30 p-3 text-sm text-muted-foreground">
+                      {latestSelectedPayment.status === "paid"
+                        ? "Payment is already marked as paid. Details are shown below in read-only mode."
+                        : "A payment schedule already exists for this application. Update it below if needed."}
+                    </div>
+                  ) : null}
+                  <PaymentSchedulerForm
+                    applicationId={String(selectedApplication.id)}
+                    payment={latestSelectedPayment ?? undefined}
+                    canSchedule={canSchedulePayment}
+                    scheduleHint="You can schedule the office payment date here after the inspection is approved."
+                  />
+                </div>
+                <div className="p-6 bg-muted/5">
+                  <InstallationSchedulerForm
+                    applicationId={String(selectedApplication.id)}
+                    scheduledAt={(selectedApplication.inhouse_installation_scheduled_at as string | null | undefined) ?? null}
+                    canSchedule={Boolean(canScheduleInstallation)}
+                    isCompleted={Boolean(selectedApplication.inhouse_installation_completed)}
+                  />
+                </div>
+                <div className="p-6">
+                  {canMarkInstallationComplete ? (
+                    <InhouseInstallationForm
+                      applicationId={String(selectedApplication.id)}
+                      plumbers={plumbers}
+                      currentPlumberId={(selectedApplication.accredited_plumber_id as string | null | undefined) ?? null}
+                      isCompleted={Boolean(selectedApplication.inhouse_installation_completed)}
+                      variant="admin"
+                    />
+                  ) : (
+                    <div className="space-y-4">
+                      <h3 className="font-semibold text-muted-foreground">Inhouse installation</h3>
+                      <p className="text-sm text-muted-foreground">Mark installation complete after the office payment date has been scheduled.</p>
+                    </div>
+                  )}
+                </div>
+                <div className="p-6 bg-muted/5">
+                  <ConcessionaireForm
+                    applicationId={String(selectedApplication.id)}
+                    profileId={String(selectedApplication.applicant_id)}
+                  />
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       ) : noQueueResults ? (

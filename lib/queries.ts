@@ -44,14 +44,13 @@ export async function getSeminarItems() {
   return (data ?? []) as SeminarItem[];
 }
 
-export async function getApplicantSeminarProgress() {
+export async function getApplicantSeminarProgress(applicantId: string) {
   const supabase = createSupabaseAdminClient();
-  const profile = await getCurrentProfile();
 
   const { data, error } = await supabase
     .from("applicant_seminar_progress")
     .select("*")
-    .eq("applicant_id", profile.id);
+    .eq("applicant_id", applicantId);
 
   if (error) {
     throw error;
@@ -60,8 +59,8 @@ export async function getApplicantSeminarProgress() {
   return (data ?? []) as ApplicantSeminarProgress[];
 }
 
-export async function getApplicantSeminarState() {
-  const [items, progress] = await Promise.all([getSeminarItems(), getApplicantSeminarProgress()]);
+export async function getApplicantSeminarState(applicantId: string) {
+  const [items, progress] = await Promise.all([getSeminarItems(), getApplicantSeminarProgress(applicantId)]);
   const completedIds = new Set(progress.filter((item) => item.completed).map((item) => item.seminar_item_id));
   const completedCount = items.filter((item) => completedIds.has(item.id)).length;
   const allCompleted = items.length > 0 && completedCount === items.length;
@@ -74,9 +73,8 @@ export async function getApplicantSeminarState() {
   };
 }
 
-export async function getApplicantApplications() {
+export async function getApplicantApplications(applicantId: string) {
   const supabase = createSupabaseAdminClient();
-  const profile = await getCurrentProfile();
 
   const applicantApplicationsQuery = () =>
     supabase
@@ -84,7 +82,7 @@ export async function getApplicantApplications() {
       .select(
         "*, inspections(scheduled_at,status,plumbing_approved,remarks,inspected_at), payments(id,payment_type,amount,due_date,office_payment_at,status,paid_at,official_receipt_number,notes)"
       )
-      .eq("applicant_id", profile.id)
+      .eq("applicant_id", applicantId)
       .order("created_at", { ascending: false });
 
   const applicantApplicationsLegacyQuery = () =>
@@ -93,26 +91,38 @@ export async function getApplicantApplications() {
       .select(
         "*, inspections(scheduled_at,status,plumbing_approved,remarks,inspected_at), payments(id,payment_type,amount,due_date,status,paid_at,official_receipt_number,notes)"
       )
-      .eq("applicant_id", profile.id)
+      .eq("applicant_id", applicantId)
       .order("created_at", { ascending: false });
 
   const { data, error } = await applicantApplicationsQuery();
 
-  if (isMissingOfficePaymentAtColumn(error)) {
-    const legacyResult = await applicantApplicationsLegacyQuery();
-
-    if (legacyResult.error) {
-      throw legacyResult.error;
+  if (error) {
+    if (isMissingOfficePaymentAtColumn(error)) {
+      const { data: legacyData, error: legacyError } = await applicantApplicationsLegacyQuery();
+      if (legacyError) throw legacyError;
+      return (legacyData ?? []) as ApplicationWithRelations[];
     }
-
-    return (legacyResult.data ?? []) as ApplicationWithRelations[];
+    throw error;
   }
+
+  return (data ?? []) as ApplicationWithRelations[];
+}
+
+export async function getApplicants() {
+  const supabase = createSupabaseAdminClient();
+  const profile = await getCurrentProfile();
+
+  const { data, error } = await supabase
+    .from("applicants")
+    .select("*")
+    .eq("profile_id", profile.id)
+    .order("created_at", { ascending: false });
 
   if (error) {
     throw error;
   }
 
-  return (data ?? []) as ApplicationWithRelations[];
+  return data ?? [];
 }
 
 export async function getAccreditedPlumbers() {
@@ -191,7 +201,10 @@ export async function getAdminApplicationsQueue(
     .order("created_at", { ascending: false });
 
   if (filters?.q) {
-    query = query.ilike("full_name", `%${filters.q}%`);
+    const searchTerms = filters.q.split(/[\s,]+/).filter(Boolean);
+    for (const term of searchTerms) {
+      query = query.ilike("full_name", `%${term}%`);
+    }
   }
 
   if (filters?.status && filters.status !== "all") {
@@ -404,10 +417,19 @@ export async function getLatestApplicantApplication() {
   const supabase = createSupabaseAdminClient();
   const profile = await getCurrentProfile();
 
+  // Get all applicant IDs belonging to this profile
+  const { data: applicants } = await supabase
+    .from("applicants")
+    .select("id")
+    .eq("profile_id", profile.id);
+
+  const applicantIds = (applicants ?? []).map((a) => a.id);
+  if (applicantIds.length === 0) return null;
+
   const { data, error } = await supabase
     .from("applications")
     .select("*")
-    .eq("applicant_id", profile.id)
+    .in("applicant_id", applicantIds)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

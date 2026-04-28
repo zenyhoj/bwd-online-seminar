@@ -6,7 +6,7 @@ create table if not exists public.seminar_items (
   organization_id uuid not null references public.organizations (id) on delete cascade,
   title text not null,
   description text not null,
-  media_type text not null default 'text' check (media_type in ('text', 'image', 'video')),
+  media_type text not null default 'text' check (media_type in ('text', 'image', 'video', 'pdf')),
   media_url text,
   display_order integer not null default 0,
   is_active boolean not null default true,

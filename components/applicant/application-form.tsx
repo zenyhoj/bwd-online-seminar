@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 import { createApplicationAction } from "@/actions/applications";
 import { initialActionState } from "@/actions/state";
@@ -9,136 +10,110 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { Database } from "@/types";
 
-export function ApplicationForm() {
+type Applicant = Database["public"]["Tables"]["applicants"]["Row"];
+
+type ApplicationFormProps = {
+  applicantId: string;
+  applicant: Applicant | null;
+};
+
+function InfoRow({ label, value }: { label: string; value: string | number | null | undefined }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-sm">
+        {value ?? <span className="text-muted-foreground/60 italic">Not provided</span>}
+      </p>
+    </div>
+  );
+}
+
+export function ApplicationForm({ applicantId, applicant }: ApplicationFormProps) {
+  const router = useRouter();
   const [state, formAction, pending] = useActionState(createApplicationAction, initialActionState);
   const fieldErrors = state.fieldErrors ?? {};
   const errorText = (name: string) => fieldErrors[name]?.[0];
   const hasError = (name: string) => Boolean(errorText(name));
 
+  useEffect(() => {
+    if (state.success && state.redirectTo) {
+      router.push(state.redirectTo);
+    }
+  }, [state.success, state.redirectTo, router]);
+
+  // Parse name parts from full_name (stored as "LastName, FirstName MI")
+  const fullName = applicant?.full_name ?? "";
+  const [namePart, ...rest] = fullName.split(",");
+  const lastName = namePart?.trim() ?? "";
+  const firstAndMI = rest.join(",").trim();
+  const firstNameParts = firstAndMI.split(" ").filter(Boolean);
+  const middleInitial = firstNameParts.length > 1 ? firstNameParts[firstNameParts.length - 1].replace(".", "") : "";
+  const firstName = firstNameParts.slice(0, middleInitial ? -1 : undefined).join(" ");
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Applicant information</CardTitle>
-        <CardDescription>Provide the required public user details after finishing the seminar series.</CardDescription>
+        <CardTitle>Application details</CardTitle>
+        <CardDescription>
+          Your registered information is pre-filled. Just enter the number of users to submit.
+        </CardDescription>
       </CardHeader>
-      <CardContent>
-        <form action={formAction} className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="lastName">Last name</Label>
-            <Input
-              id="lastName"
-              name="lastName"
-              required
-              aria-invalid={hasError("lastName")}
-              className={hasError("lastName") ? "border-destructive focus-visible:ring-destructive" : undefined}
-            />
-            {hasError("lastName") ? <p className="text-xs text-destructive">{errorText("lastName")}</p> : null}
+      <CardContent className="space-y-6">
+        {/* Read-only applicant info display */}
+        <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            Applicant information (from registration)
+          </p>
+          <div className="grid gap-3 md:grid-cols-2">
+            <InfoRow label="Full name" value={applicant?.full_name} />
+            <InfoRow label="Sex" value={applicant?.gender} />
+            <InfoRow label="Age" value={applicant?.age} />
+            <InfoRow label="Cellphone" value={applicant?.cellphone_number} />
+            <InfoRow label="Address" value={applicant?.address} />
           </div>
+        </div>
+
+        {/* Hidden fields carrying applicant data to the action */}
+        <form action={formAction} className="space-y-4">
+          <input type="hidden" name="applicantId" value={applicantId} />
+          <input type="hidden" name="lastName" value={lastName} />
+          <input type="hidden" name="firstName" value={firstName || lastName} />
+          <input type="hidden" name="middleInitial" value={middleInitial} />
+          <input type="hidden" name="sex" value={applicant?.gender ?? "Male"} />
+          <input type="hidden" name="age" value={applicant?.age ?? 1} />
+          <input type="hidden" name="address" value={applicant?.address ?? ""} />
+          <input type="hidden" name="cellphoneNumber" value={applicant?.cellphone_number ?? ""} />
+
+          {/* Only field the user fills in */}
           <div className="space-y-2">
-            <Label htmlFor="firstName">First name</Label>
-            <Input
-              id="firstName"
-              name="firstName"
-              required
-              aria-invalid={hasError("firstName")}
-              className={hasError("firstName") ? "border-destructive focus-visible:ring-destructive" : undefined}
-            />
-            {hasError("firstName") ? <p className="text-xs text-destructive">{errorText("firstName")}</p> : null}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="middleInitial">Middle initial</Label>
-            <Input
-              id="middleInitial"
-              name="middleInitial"
-              maxLength={3}
-              placeholder="M.I."
-              aria-invalid={hasError("middleInitial")}
-              className={hasError("middleInitial") ? "border-destructive focus-visible:ring-destructive" : undefined}
-            />
-            {hasError("middleInitial") ? <p className="text-xs text-destructive">{errorText("middleInitial")}</p> : null}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="sex">Sex</Label>
-            <select
-              id="sex"
-              name="sex"
-              className={`flex h-10 w-full rounded-md border bg-background px-3 py-2 text-sm ${
-                hasError("sex")
-                  ? "border-destructive focus-visible:ring-2 focus-visible:ring-destructive focus-visible:ring-offset-2"
-                  : "border-input"
-              }`}
-              defaultValue="Male"
-              aria-invalid={hasError("sex")}
-              required
-            >
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-            </select>
-            {hasError("sex") ? <p className="text-xs text-destructive">{errorText("sex")}</p> : null}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="age">Age</Label>
-            <Input
-              id="age"
-              name="age"
-              type="number"
-              min={1}
-              max={120}
-              required
-              aria-invalid={hasError("age")}
-              className={hasError("age") ? "border-destructive focus-visible:ring-destructive" : undefined}
-            />
-            {hasError("age") ? <p className="text-xs text-destructive">{errorText("age")}</p> : null}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="cellphoneNumber">Cellphone number</Label>
-            <Input
-              id="cellphoneNumber"
-              name="cellphoneNumber"
-              inputMode="tel"
-              required
-              aria-invalid={hasError("cellphoneNumber")}
-              className={hasError("cellphoneNumber") ? "border-destructive focus-visible:ring-destructive" : undefined}
-            />
-            {hasError("cellphoneNumber") ? (
-              <p className="text-xs text-destructive">{errorText("cellphoneNumber")}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground">Enter at least 11 digits including the mobile prefix.</p>
-            )}
-          </div>
-          <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="address">Address</Label>
-            <Input
-              id="address"
-              name="address"
-              required
-              aria-invalid={hasError("address")}
-              className={hasError("address") ? "border-destructive focus-visible:ring-destructive" : undefined}
-            />
-            {hasError("address") ? <p className="text-xs text-destructive">{errorText("address")}</p> : null}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="numberOfUsers">Number of users</Label>
+            <Label htmlFor="numberOfUsers">
+              Number of users <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="numberOfUsers"
               name="numberOfUsers"
               type="number"
               min={1}
+              max={100}
               required
+              placeholder="How many people will use this connection?"
               aria-invalid={hasError("numberOfUsers")}
               className={hasError("numberOfUsers") ? "border-destructive focus-visible:ring-destructive" : undefined}
             />
-            {hasError("numberOfUsers") ? <p className="text-xs text-destructive">{errorText("numberOfUsers")}</p> : null}
+            {hasError("numberOfUsers") ? (
+              <p className="text-xs text-destructive">{errorText("numberOfUsers")}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">Enter the total number of people who will use this water connection.</p>
+            )}
           </div>
-          <div className="md:col-span-2">
-            <FormMessage state={state} />
-          </div>
-          <div className="md:col-span-2">
-            <Button type="submit" disabled={pending}>
-              {pending ? "Submitting..." : "Submit applicant information"}
-            </Button>
-          </div>
+
+          <FormMessage state={state} />
+
+          <Button type="submit" disabled={pending} className="w-full sm:w-auto">
+            {pending ? "Submitting..." : "Submit application"}
+          </Button>
         </form>
       </CardContent>
     </Card>

@@ -50,17 +50,14 @@ export function InhouseInstallationForm({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{variant === "admin" ? "Inhouse installation" : "Mark inhouse installation complete"}</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <div className="space-y-4">
+      <h3 className="font-semibold">{variant === "admin" ? "Inhouse installation" : "Mark inhouse installation complete"}</h3>
         {plumbers.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No accredited plumbers are available yet. Ask the administrator to add one first.
           </p>
         ) : (
-          <form action={formAction} className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+          <form action={formAction} className="grid gap-4">
             <input type="hidden" name="applicationId" value={applicationId} />
             <input type="hidden" name="completed" value="true" />
             <div className="space-y-2">
@@ -68,9 +65,10 @@ export function InhouseInstallationForm({
               <select
                 id={`accreditedPlumberId-${applicationId}`}
                 name="accreditedPlumberId"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 defaultValue={currentPlumberId ?? ""}
                 required
+                disabled={isCompleted}
               >
                 <option value="">Select accredited plumber</option>
                 {plumbers.map((plumber) => (
@@ -80,18 +78,18 @@ export function InhouseInstallationForm({
                 ))}
               </select>
             </div>
-            <Button type="submit" disabled={pending}>
-              {pending ? "Saving..." : isCompleted ? "Update completion" : "Mark complete"}
-            </Button>
-            <div className="md:col-span-2">
+            
+            <div className="space-y-4">
               {isCompleted ? (
-                <p className="mb-2 text-sm text-muted-foreground">This application is already marked complete.</p>
+                <p className="text-sm text-muted-foreground">This application is already marked complete.</p>
               ) : null}
               <FormMessage state={state} />
+              <Button type="submit" disabled={pending || isCompleted} className="w-full sm:w-auto">
+                {pending ? "Saving..." : isCompleted ? "Completed" : "Mark complete"}
+              </Button>
             </div>
           </form>
         )}
-      </CardContent>
-    </Card>
+    </div>
   );
 }
