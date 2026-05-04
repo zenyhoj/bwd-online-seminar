@@ -13,7 +13,8 @@ const applicantSchema = z.object({
   sex: z.enum(["Male", "Female"]),
   age: z.coerce.number().int().min(1).max(120),
   address: z.string().min(10, "Address must be at least 10 characters"),
-  cellphoneNumber: z.string().min(11).max(20)
+  cellphoneNumber: z.string().min(11).max(20),
+  purposeOfSeminar: z.enum(["new_service", "reconnection", "change_name", "others"]).optional()
 });
 
 export async function createApplicantAction(_prevState: ActionState, formData: FormData): Promise<ActionState> {
@@ -26,7 +27,8 @@ export async function createApplicantAction(_prevState: ActionState, formData: F
       sex: formData.get("sex"),
       age: formData.get("age"),
       address: formData.get("address"),
-      cellphoneNumber: formData.get("cellphoneNumber")
+      cellphoneNumber: formData.get("cellphoneNumber"),
+      purposeOfSeminar: formData.get("purposeOfSeminar")
     });
 
     if (parsed.error) {
@@ -43,7 +45,8 @@ export async function createApplicantAction(_prevState: ActionState, formData: F
       gender: parsed.data.sex,
       age: parsed.data.age,
       address: parsed.data.address,
-      cellphone_number: parsed.data.cellphoneNumber
+      cellphone_number: parsed.data.cellphoneNumber,
+      purpose_of_seminar: parsed.data.purposeOfSeminar
     });
 
     if (error) {

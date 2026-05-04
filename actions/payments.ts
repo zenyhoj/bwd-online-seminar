@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getActionContext, parseFormData, withErrorHandling } from "@/actions/_helpers";
 import { paymentScheduleSchema, paymentStatusSchema } from "@/schemas";
+import { validateBusinessSchedule } from "@/lib/business-hours";
 import type { ActionState } from "@/types";
 
 function isPastOfficePaymentDate(value: string) {
@@ -32,6 +33,11 @@ export async function schedulePaymentAction(_prevState: ActionState, formData: F
         success: false,
         message: "Office payment schedule must be today or a future date and time."
       };
+    }
+
+    const scheduleValidation = validateBusinessSchedule(parsed.data.officePaymentAt);
+    if (!scheduleValidation.valid) {
+      return { success: false, message: scheduleValidation.message ?? "Invalid schedule." };
     }
 
     const { data: application, error: applicationError } = await supabase

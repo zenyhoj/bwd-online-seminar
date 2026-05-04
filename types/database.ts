@@ -46,6 +46,7 @@ export type Database = {
           age: number | null;
           address: string | null;
           cellphone_number: string | null;
+          purpose_of_seminar: Database["public"]["Enums"]["seminar_purpose"] | null;
           created_at: string;
           updated_at: string;
         };
@@ -58,6 +59,7 @@ export type Database = {
           age?: number | null;
           address?: string | null;
           cellphone_number?: string | null;
+          purpose_of_seminar?: Database["public"]["Enums"]["seminar_purpose"] | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -70,6 +72,7 @@ export type Database = {
           age?: number | null;
           address?: string | null;
           cellphone_number?: string | null;
+          purpose_of_seminar?: Database["public"]["Enums"]["seminar_purpose"] | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -886,6 +889,7 @@ export type Database = {
       document_status: "pending" | "verified" | "rejected";
       payment_status: "scheduled" | "paid" | "overdue" | "cancelled";
       payment_type: "inspection_fee" | "connection_fee" | "materials" | "other";
+      seminar_purpose: "new_service" | "reconnection" | "change_name" | "others";
     };
     CompositeTypes: Record<string, never>;
   };

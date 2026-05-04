@@ -278,29 +278,8 @@ export async function updateInhouseInstallationAction(
       return { success: false, message: error.message };
     }
 
-    if (profile.role === "admin") {
-      const { data: latestPayment } = await supabase
-        .from("payments")
-        .select("status")
-        .eq("application_id", parsed.data.applicationId)
-        .order("paid_at", { ascending: false, nullsFirst: false })
-        .order("due_date", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      const nextApplicationStatus =
-        parsed.data.completed && latestPayment?.status === "paid" ? "approved" : "payment_scheduled";
-
-      const { error: statusUpdateError } = await supabase
-        .from("applications")
-        .update({ status: nextApplicationStatus })
-        .eq("id", parsed.data.applicationId)
-        .neq("status", "converted");
-
-      if (statusUpdateError) {
-        return { success: false, message: statusUpdateError.message };
-      }
-    }
+      // Do not artificially jump the status to payment_scheduled or approved here.
+      // The workflow logic in the admin dashboard handles the progression based on completed steps.
 
     revalidatePath("/applicant");
     revalidatePath("/admin");

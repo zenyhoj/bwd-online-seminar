@@ -36,6 +36,7 @@ create type public.document_type as enum (
 create type public.document_status as enum ('pending', 'verified', 'rejected');
 create type public.payment_status as enum ('scheduled', 'paid', 'overdue', 'cancelled');
 create type public.payment_type as enum ('inspection_fee', 'connection_fee', 'materials', 'other');
+create type public.seminar_purpose as enum ('new_service', 'reconnection', 'change_name', 'others');
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -82,6 +83,7 @@ create table public.applicants (
   age integer check (age >= 0),
   address text,
   cellphone_number text,
+  purpose_of_seminar public.seminar_purpose,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );

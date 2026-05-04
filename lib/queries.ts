@@ -170,7 +170,7 @@ export async function getAdminApplications(pagination: PaginationParams): Promis
   const { data, count, error } = await supabase
     .from("applications")
     .select(
-      "id, applicant_id, full_name, service_type, status, submitted_at, inhouse_installation_completed, accredited_plumbers(full_name), inspections(id,status,plumbing_approved,scheduled_at), documents(id,status), payments(id,status,paid_at,due_date), concessionaires(id)",
+      "id, applicant_id, full_name, service_type, status, submitted_at, inhouse_installation_completed, water_meter_installation_scheduled_at, accredited_plumbers(full_name), inspections(id,status,plumbing_approved,scheduled_at), documents(id,status), payments(id,status,paid_at,due_date), concessionaires(id)",
       { count: "exact" }
     )
     .eq("organization_id", profile.organization_id)
@@ -194,7 +194,7 @@ export async function getAdminApplicationsQueue(
   let query = supabase
     .from("applications")
     .select(
-      "id, applicant_id, full_name, service_type, status, submitted_at, inhouse_installation_completed, accredited_plumbers(full_name), inspections(id,status,plumbing_approved,scheduled_at), documents(id,status), payments(id,status,paid_at,due_date), concessionaires(id)",
+      "id, applicant_id, full_name, service_type, status, submitted_at, inhouse_installation_completed, water_meter_installation_scheduled_at, accredited_plumbers(full_name), inspections(id,status,plumbing_approved,scheduled_at), documents(id,status), payments(id,status,paid_at,due_date), concessionaires(id)",
       { count: "exact" }
     )
     .eq("organization_id", profile.organization_id)

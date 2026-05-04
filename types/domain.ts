@@ -25,6 +25,8 @@ export type ApplicationWithRelations = Application & {
   inspections?: Inspection[];
   documents?: Document[];
   payments?: Payment[];
+  water_meter_installation_scheduled_at?: string | null;
+  water_meter_installed_at?: string | null;
 };
 
 export type PaginationParams = {

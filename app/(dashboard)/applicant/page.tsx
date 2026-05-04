@@ -214,7 +214,7 @@ export default async function ApplicantDashboardPage({ searchParams }: Applicant
             </span>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-4">
             <div className="rounded-lg border border-border/70 p-3">
               <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Inspection</p>
               <p className="mt-1 font-medium">{formatDateTime(latestInspectionSchedule)}</p>
@@ -224,11 +224,23 @@ export default async function ApplicantDashboardPage({ searchParams }: Applicant
               <div className="mt-1">{latestPayment ? <StatusBadge status={latestPayment.status ?? "scheduled"} /> : "Not scheduled"}</div>
             </div>
             <div className="rounded-lg border border-border/70 p-3">
-              <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Installation</p>
+              <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Plumbing</p>
               <p className="mt-1 font-medium">
                 {selectedApplication?.inhouse_installation_completed_at
                   ? `Completed ${formatDate(selectedApplication.inhouse_installation_completed_at)}`
-                  : "Queued"}
+                  : "Pending"}
+              </p>
+            </div>
+            <div className={`rounded-lg border p-3 ${
+              selectedApplication?.water_meter_installation_scheduled_at
+                ? "border-primary/50 bg-primary/5 shadow-sm"
+                : "border-border/70"
+            }`}>
+              <p className={`text-xs uppercase tracking-[0.14em] ${selectedApplication?.water_meter_installation_scheduled_at ? "text-primary font-semibold" : "text-muted-foreground"}`}>Water Meter</p>
+              <p className={`mt-1 font-medium ${selectedApplication?.water_meter_installation_scheduled_at ? "text-primary" : ""}`}>
+                {selectedApplication?.water_meter_installation_scheduled_at
+                  ? formatDateTime(selectedApplication.water_meter_installation_scheduled_at)
+                  : "Not scheduled"}
               </p>
             </div>
           </div>
@@ -291,10 +303,11 @@ export default async function ApplicantDashboardPage({ searchParams }: Applicant
                       </div>
                       <StatusBadge status={effectiveApplicationWorkflowStatus} />
                     </div>
-                    <div className="mt-3 grid gap-3 text-sm md:grid-cols-3">
+                    <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2 md:grid-cols-4">
                       <p><span className="text-muted-foreground">Inspection:</span> {formatDateTime(getScheduledInspectionDate(application))}</p>
                       <p><span className="text-muted-foreground">Payment:</span> {latestApplicationPayment ? formatPaymentType(latestApplicationPayment.payment_type) : "Not scheduled"}</p>
-                      <p><span className="text-muted-foreground">Installation:</span> {application.inhouse_installation_completed_at ? `Completed on ${formatDate(application.inhouse_installation_completed_at)}` : "Queued"}</p>
+                      <p><span className="text-muted-foreground">Plumbing:</span> {application.inhouse_installation_completed_at ? formatDate(application.inhouse_installation_completed_at) : "Pending"}</p>
+                      <p><span className="text-muted-foreground">Water Meter:</span> {application.water_meter_installation_scheduled_at ? <span className="font-semibold text-primary">{formatDateTime(application.water_meter_installation_scheduled_at)}</span> : "Not scheduled"}</p>
                     </div>
                   </div>
                 );

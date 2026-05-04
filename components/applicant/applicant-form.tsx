@@ -73,9 +73,26 @@ export function ApplicantForm() {
               <Input id="cellphoneNumber" name="cellphoneNumber" required placeholder="e.g. 09123456789" inputMode="tel" />
             </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="address">Address <span className="text-destructive">*</span></Label>
-            <Input id="address" name="address" required placeholder="Enter full address" />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="address">Address <span className="text-destructive">*</span></Label>
+              <Input id="address" name="address" required placeholder="Enter full address" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="purposeOfSeminar">Purpose of Seminar <span className="text-destructive">*</span></Label>
+              <select
+                id="purposeOfSeminar"
+                name="purposeOfSeminar"
+                required
+                defaultValue="new_service"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="new_service">New Service</option>
+                <option value="reconnection">Reconnection</option>
+                <option value="change_name">Change Name</option>
+                <option value="others">Others</option>
+              </select>
+            </div>
           </div>
           <FormMessage state={state} />
         </CardContent>

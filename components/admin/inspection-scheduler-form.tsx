@@ -134,7 +134,7 @@ export function InspectionSchedulerForm({
         <CardTitle>Schedule inspection</CardTitle>
       </CardHeader>
       <CardContent>
-        <form action={scheduleAction} className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+        <form action={scheduleAction} className="flex flex-col gap-4">
           <input type="hidden" name="applicationId" value={applicationId} />
           <div className="space-y-2">
             <Label htmlFor={`inspector-${applicationId}`}>Inspector</Label>
@@ -161,13 +161,12 @@ export function InspectionSchedulerForm({
               min={minSchedule || undefined}
               required
             />
+            <p className="text-xs text-muted-foreground">Monday – Friday, 8:00 AM – 5:00 PM only.</p>
           </div>
-          <Button type="submit" disabled={schedulePending}>
+          <Button type="submit" disabled={schedulePending} className="mt-2">
             {schedulePending ? "Saving..." : "Schedule"}
           </Button>
-          <div className="md:col-span-3">
-            <FormMessage state={scheduleState} />
-          </div>
+          <FormMessage state={scheduleState} />
         </form>
       </CardContent>
     </Card>

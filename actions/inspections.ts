@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getActionContext, parseFormData, withErrorHandling } from "@/actions/_helpers";
 import { inspectionRescheduleSchema, inspectionScheduleSchema, inspectionUpdateSchema } from "@/schemas";
+import { validateBusinessSchedule } from "@/lib/business-hours";
 import type { ActionState } from "@/types";
 
 function isPastDateTime(value: string) {
@@ -40,6 +41,11 @@ export async function scheduleInspectionAction(_prevState: ActionState, formData
         success: false,
         message: "Inspection schedule must be today or later than the current date and time."
       };
+    }
+
+    const scheduleValidation = validateBusinessSchedule(parsed.data.scheduledAt);
+    if (!scheduleValidation.valid) {
+      return { success: false, message: scheduleValidation.message ?? "Invalid schedule." };
     }
 
     // Prerequisite: in-house plumbing must be completed first
@@ -116,6 +122,11 @@ export async function rescheduleInspectionAction(_prevState: ActionState, formDa
         success: false,
         message: "Rescheduled inspection time must be today or later than the current date and time."
       };
+    }
+
+    const scheduleValidation = validateBusinessSchedule(parsed.data.scheduledAt);
+    if (!scheduleValidation.valid) {
+      return { success: false, message: scheduleValidation.message ?? "Invalid schedule." };
     }
 
     const { data: inspection, error: fetchError } = await supabase
