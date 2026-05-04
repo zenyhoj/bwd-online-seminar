@@ -2,11 +2,6 @@
 
 Production-ready starter for a multi-tenant online water application workflow built with Next.js App Router, TypeScript, Tailwind CSS, shadcn/ui, and Supabase.
 
-## Supabase Project
-
-- Project ref: `oisbqqjaehvlhsvesrxo`
-- URL: `https://oisbqqjaehvlhsvesrxo.supabase.co`
-
 ## Setup
 
 1. Copy `.env.example` to `.env.local`.
